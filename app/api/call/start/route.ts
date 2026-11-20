@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
+import { chargeUsage, refundCharge } from "@/lib/usage";
 import { generatePlan } from "@/lib/call/claude";
 import { LESSON_USAGE_COST } from "@/lib/call/levels";
 import { closeStale, fail, saveOrLog, splitActive, type ActiveLessonRow } from "@/lib/call/server";
@@ -53,12 +54,13 @@ export async function POST(request: Request) {
   }
 
   // 사용량 차감과 계획 조회를 동시에
-  const [{ data: left, error: usageError }, { data: existingPlan }] = await Promise.all([
-    supabase.rpc("consume_usage", { p_n: LESSON_USAGE_COST }),
+  const [charge, { data: existingPlan }] = await Promise.all([
+    chargeUsage(supabase, LESSON_USAGE_COST),
     supabase.from("lesson_plans").select("id, plan").eq("topic_id", topic.id).eq("level", level).maybeSingle<{ id: string; plan: LessonPlan }>(),
   ]);
-  if (usageError) return fail(500, "사용량을 확인하지 못했어요.");
-  if ((left as number) < 0) {
+  if (!charge) return fail(500, "사용량을 확인하지 못했어요.");
+  const left = charge.left;
+  if (left < 0) {
     return fail(429, `오늘 남은 연습이 ${LESSON_USAGE_COST}회보다 적어요. 수업은 내일 다시 할 수 있어요.`);
   }
 
@@ -69,7 +71,7 @@ export async function POST(request: Request) {
       generated = await generatePlan(topic, level);
     } catch (e) {
       console.error("plan failed", e);
-      await supabase.rpc("refund_usage", { p_n: LESSON_USAGE_COST });
+      await refundCharge(supabase, charge.ticket);
       return fail(describeClaudeError(e).status, `수업을 준비하지 못했어요. ${describeClaudeError(e).message}`);
     }
     const { data: inserted } = await supabase
@@ -82,7 +84,7 @@ export async function POST(request: Request) {
       // 가족이 동시에 같은 계획을 만든 경우: 먼저 만든 것을 쓴다
       (await supabase.from("lesson_plans").select("id, plan").eq("topic_id", topic.id).eq("level", level).maybeSingle<{ id: string; plan: LessonPlan }>()).data;
     if (!plan) {
-      await supabase.rpc("refund_usage", { p_n: LESSON_USAGE_COST });
+      await refundCharge(supabase, charge.ticket);
       return fail(500, "수업을 저장하지 못했어요.");
     }
   }
@@ -93,13 +95,16 @@ export async function POST(request: Request) {
     .select("id")
     .single();
   if (error || !lesson) {
-    await supabase.rpc("refund_usage", { p_n: LESSON_USAGE_COST });
+    await refundCharge(supabase, charge.ticket);
     return fail(500, "수업을 시작하지 못했어요.");
   }
 
   const opening = { role: "tutor" as const, text: plan.plan.opening, ko: plan.plan.opening_ko, correction: null };
-  // 첫 마디 저장은 기다리지 않는다 (다음 턴까지 몇 초 여유가 있다)
+  // 첫 마디 저장 · 영수증을 수업에 묶기(대답 없이 끝나면 환불용)는 기다리지 않는다 (다음 턴까지 몇 초 여유가 있다)
   after(async () => {
+    await saveOrLog(`link charge (lesson ${lesson.id})`, () =>
+      supabase.rpc("link_charge", { p_ticket: charge.ticket, p_lesson: lesson.id }),
+    );
     await saveOrLog(`opening (lesson ${lesson.id})`, () =>
       supabase.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
     );
@@ -111,7 +116,7 @@ export async function POST(request: Request) {
     level,
     expressions: plan.plan.expressions,
     opening,
-    usageLeft: left as number,
+    usageLeft: left,
   };
   return NextResponse.json(body);
 }

@@ -1,8 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import { todayKst, type DB } from "../data";
+import type { DB } from "../data";
 import { one } from "../types";
-import { LESSON_USAGE_COST } from "./levels";
 import type { ActiveLessonRow } from "./rules";
 
 export { isResumable, splitActive, type ActiveLessonRow } from "./rules";
@@ -83,20 +82,12 @@ export async function saveOrLog(label: string, run: () => PromiseLike<{ error: u
 
 // ───── 끊긴 통화 · 중도 종료 ─────
 
-/** 한국 시간 기준 날짜 */
-function kstDay(iso: string) {
-  return new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
-
 /**
  * 진행 중인 수업을 중도 종료(left)로 닫는다. 대답을 한 번도 안 했으면 연습 횟수를 돌려준다.
- * 사용량은 날마다 따로 세므로, 오늘 시작한 수업만 돌려준다 (어제 차감분을 오늘 돌려주지 않는다).
+ * 환불 조건(내 수업 · 중도 종료 · 센 대답 없음 · 오늘 차감 · 한 번만)은 DB 함수 refund_lesson 이 다시 확인한다.
  * 이미 닫힌 수업이면(동시에 두 번 불려도) 아무것도 하지 않고 null.
  */
-export async function closeLesson(
-  supabase: DB,
-  lesson: { id: string; turns: number; startedAt: string },
-): Promise<{ refunded: boolean } | null> {
+export async function closeLesson(supabase: DB, lesson: { id: string; turns: number }): Promise<{ refunded: boolean } | null> {
   const { data: closed, error } = await supabase
     .from("lessons")
     .update({ status: "left", ended_at: new Date().toISOString() })
@@ -108,13 +99,12 @@ export async function closeLesson(
     return null;
   }
   if (!closed?.length) return null;
-  if (lesson.turns > 0 || kstDay(lesson.startedAt) !== todayKst()) return { refunded: false };
-  const refunded = await saveOrLog(`refund (lesson ${lesson.id})`, () =>
-    supabase.rpc("refund_usage", { p_n: LESSON_USAGE_COST }),
-  );
-  return { refunded };
+  if (lesson.turns > 0) return { refunded: false };
+  const { data, error: refundError } = await supabase.rpc("refund_lesson", { p_lesson: lesson.id });
+  if (refundError) console.error(`[call] refund lesson ${lesson.id} failed`, refundError);
+  return { refunded: data === true };
 }
 
 export function closeStale(supabase: DB, stale: ActiveLessonRow[]) {
-  return Promise.all(stale.map((r) => closeLesson(supabase, { id: r.id, turns: r.turns, startedAt: r.started_at })));
+  return Promise.all(stale.map((r) => closeLesson(supabase, { id: r.id, turns: r.turns })));
 }
