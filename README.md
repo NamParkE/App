@@ -26,7 +26,7 @@
 ### 1. Supabase
 
 1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 지역은 Northeast Asia (Seoul)를 추천합니다.
-2. **SQL Editor**에 [`supabase/migrations/0001_init.sql`](supabase/migrations/0001_init.sql)을 통째로 붙여 넣고 실행합니다.
+2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
 3. 같은 곳에서 관리자(가족 계정을 만들 사람) 이메일을 등록합니다.
    ```sql
    insert into public.owner_emails (email) values ('관리자@gmail.com');
