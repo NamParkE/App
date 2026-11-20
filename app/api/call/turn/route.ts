@@ -6,6 +6,7 @@ import { tutorTurn } from "@/lib/call/claude";
 import { LESSON_TURNS, MAX_SKIPS } from "@/lib/call/levels";
 import { fail, loadLesson, saveOrLog } from "@/lib/call/server";
 import { trailingSkips } from "@/lib/call/rules";
+import { adminClient, MISSING_SERVICE_KEY } from "@/lib/supabase/admin";
 import type { TurnResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return fail(400, "잘못된 요청이에요.");
   const { supabase, userId } = await currentUser();
   if (!userId) return fail(401, "다시 로그인해 주세요.");
+  const admin = adminClient();
+  if (!admin) return fail(500, MISSING_SERVICE_KEY);
 
   const lesson = await loadLesson(supabase, parsed.data.lessonId);
   if (!lesson) return fail(404, "수업을 찾을 수 없어요.");
@@ -50,14 +53,14 @@ export async function POST(request: Request) {
   // (기록 없이 턴만 올라가면 다음 턴에서 선생님이 앞 대화를 모르게 된다)
   after(async () => {
     const saved = await saveOrLog(`turn ${turnNumber} messages (lesson ${lesson.id})`, () =>
-      supabase.from("lesson_messages").insert([
+      admin.from("lesson_messages").insert([
         { lesson_id: lesson.id, user_id: userId, role: "user", text: parsed.data.said, counted },
         { lesson_id: lesson.id, user_id: userId, role: "tutor", text: out.reply, ko: out.ko, correction: out.correction },
       ]),
     );
     if (!saved) return;
     await saveOrLog(`turn ${turnNumber} count (lesson ${lesson.id})`, () =>
-      supabase.from("lessons").update({ turns, last_active_at: new Date().toISOString() }).eq("id", lesson.id),
+      admin.from("lessons").update({ turns, last_active_at: new Date().toISOString() }).eq("id", lesson.id).eq("user_id", userId),
     );
   });
 

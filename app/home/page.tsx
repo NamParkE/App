@@ -10,6 +10,7 @@ import HomeModeSwitch, { ModeTabs } from "./ModeSwitch";
 import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
 import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
 import { closeStale, splitActive, type ActiveLessonRow } from "@/lib/call/server";
+import { adminClient } from "@/lib/supabase/admin";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ cat?: string }> }) {
   const { cat } = await searchParams;
@@ -54,7 +55,10 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     ]);
   // 끊긴 통화: 30분 안이면 이어하기 카드, 지난 것은 응답 뒤에 닫는다 (대답 0번이면 환불)
   const { resumable, stale } = splitActive(active ?? []);
-  if (stale.length) after(() => closeStale(supabase, stale));
+  if (stale.length) {
+    const admin = adminClient();
+    if (admin) after(() => closeStale(supabase, admin, stale));
+  }
   const profile = checkProfile(rawProfile);
   const left = Math.max(0, profile.daily_limit - used);
 

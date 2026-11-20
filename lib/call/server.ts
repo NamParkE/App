@@ -1,6 +1,7 @@
 import "server-only";
 import { NextResponse } from "next/server";
 import type { DB } from "../data";
+import type { Admin } from "../supabase/admin";
 import { one } from "../types";
 import type { ActiveLessonRow } from "./rules";
 
@@ -87,8 +88,13 @@ export async function saveOrLog(label: string, run: () => PromiseLike<{ error: u
  * 환불 조건(내 수업 · 중도 종료 · 센 대답 없음 · 오늘 차감 · 한 번만)은 DB 함수 refund_lesson 이 다시 확인한다.
  * 이미 닫힌 수업이면(동시에 두 번 불려도) 아무것도 하지 않고 null.
  */
-export async function closeLesson(supabase: DB, lesson: { id: string; turns: number }): Promise<{ refunded: boolean } | null> {
-  const { data: closed, error } = await supabase
+export async function closeLesson(
+  supabase: DB,
+  admin: Admin,
+  lesson: { id: string; turns: number },
+): Promise<{ refunded: boolean } | null> {
+  // 상태는 서버 연결로 바꾸고, 환불은 사용자 연결로 (영수증 함수가 auth.uid() 로 내 것인지 확인한다)
+  const { data: closed, error } = await admin
     .from("lessons")
     .update({ status: "left", ended_at: new Date().toISOString() })
     .eq("id", lesson.id)
@@ -105,6 +111,7 @@ export async function closeLesson(supabase: DB, lesson: { id: string; turns: num
   return { refunded: data === true };
 }
 
-export function closeStale(supabase: DB, stale: ActiveLessonRow[]) {
-  return Promise.all(stale.map((r) => closeLesson(supabase, { id: r.id, turns: r.turns })));
+/** 사용자 연결로 읽은 "내" 진행 중 수업 중 닫을 것을 닫는다 */
+export function closeStale(supabase: DB, admin: Admin, stale: ActiveLessonRow[]) {
+  return Promise.all(stale.map((r) => closeLesson(supabase, admin, { id: r.id, turns: r.turns })));
 }

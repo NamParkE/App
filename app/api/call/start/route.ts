@@ -3,6 +3,7 @@ import { z } from "zod";
 import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { chargeUsage, refundCharge } from "@/lib/usage";
+import { adminClient, MISSING_SERVICE_KEY } from "@/lib/supabase/admin";
 import { generatePlan } from "@/lib/call/claude";
 import { LESSON_USAGE_COST } from "@/lib/call/levels";
 import { closeStale, fail, saveOrLog, splitActive, type ActiveLessonRow } from "@/lib/call/server";
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return fail(400, "잘못된 요청이에요.");
   const { supabase, userId } = await currentUser();
   if (!userId) return fail(401, "다시 로그인해 주세요.");
+  const admin = adminClient();
+  if (!admin) return fail(500, MISSING_SERVICE_KEY);
 
   // 프로필 · 주제 목록 · 최근 수업 · 진행 중인 수업을 한꺼번에
   const [{ data: profile }, { data: topics }, { data: recent }, { data: active }] = await Promise.all([
@@ -38,7 +41,7 @@ export async function POST(request: Request) {
   // 끊긴 통화가 30분 안이면 새 수업 대신 이어서 하게 한다. 시간이 지난 것은 닫는다 (대답 0번이면 환불)
   const { resumable, stale } = splitActive(active ?? []);
   if (resumable) return fail(409, "끊긴 통화가 있어요. 홈에서 이어서 하거나 그만둔 뒤 시작해 주세요.");
-  if (stale.length) await closeStale(supabase, stale);
+  if (stale.length) await closeStale(supabase, admin, stale);
   const level = profile.call_level;
   const forLevel = (topics ?? []).filter((t) => level >= t.level_min && level <= t.level_max);
   if (forLevel.length === 0) return fail(500, "이 레벨의 수업 주제가 없어요.");
@@ -89,7 +92,8 @@ export async function POST(request: Request) {
     }
   }
 
-  const { data: lesson, error } = await supabase
+  // 수업은 서버 연결로 만든다 (user_id 는 로그인 정보에서). 계획은 위에서 사용자 연결로 읽어 가족 것임을 확인했다
+  const { data: lesson, error } = await admin
     .from("lessons")
     .insert({ user_id: userId, topic_id: topic.id, level, plan_id: plan.id })
     .select("id")
@@ -106,7 +110,7 @@ export async function POST(request: Request) {
       supabase.rpc("link_charge", { p_ticket: charge.ticket, p_lesson: lesson.id }),
     );
     await saveOrLog(`opening (lesson ${lesson.id})`, () =>
-      supabase.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
+      admin.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
     );
   });
 

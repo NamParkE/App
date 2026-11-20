@@ -2,6 +2,7 @@ import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/data";
 import { chargeUsage, refundCharge } from "@/lib/usage";
+import { adminClient } from "@/lib/supabase/admin";
 import { coachAttempt, describeClaudeError } from "@/lib/claude";
 import { compareSentences, pairKey } from "@/lib/diff";
 import { MEMORIZED_SCORE, one, type FeedbackResponse, type SentenceStatus } from "@/lib/types";
@@ -111,7 +112,11 @@ export async function POST(request: Request) {
 
   const newlyMemorized = status === "memorized" && prev?.status !== "memorized";
   after(async () => {
-    await supabase.rpc("bump_activity", { p_practices: 1, p_memorized: newlyMemorized ? 1 : 0 });
+    // 학습 점수는 서버 연결로만 올린다 (키가 없으면 점수만 건너뛴다)
+    const admin = adminClient();
+    if (!admin) return;
+    const { error } = await admin.rpc("bump_activity_for", { p_uid: userId, p_practices: 1, p_memorized: newlyMemorized ? 1 : 0 });
+    if (error) console.error("[feedback] activity failed", error);
   });
 
   const body: FeedbackResponse = { diff, headline, tips, coachSkipped, coachError, usageLeft, status };
