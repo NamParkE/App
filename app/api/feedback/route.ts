@@ -1,0 +1,113 @@
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { createClient } from "@/lib/supabase/server";
+import { coachAttempt } from "@/lib/claude";
+import { compareSentences, pairKey } from "@/lib/diff";
+import { MEMORIZED_SCORE, one, type FeedbackResponse, type SentenceStatus } from "@/lib/types";
+
+const Body = z.object({
+  sentenceId: z.string().uuid(),
+  said: z.string().trim().min(1).max(500),
+  mode: z.enum(["see", "hide"]),
+});
+
+function fail(status: number, message: string) {
+  return NextResponse.json({ message }, { status });
+}
+
+function localHeadline(score: number) {
+  if (score >= 100) return "완벽해요!";
+  if (score >= MEMORIZED_SCORE) return "거의 완벽해요";
+  if (score >= 70) return "거의 다 왔어요";
+  if (score >= 40) return "조금만 더 연습해요";
+  return "천천히 다시 해 봐요";
+}
+
+export async function POST(request: Request) {
+  const parsed = Body.safeParse(await request.json().catch(() => null));
+  if (!parsed.success) return fail(400, "잘못된 요청이에요.");
+  const { sentenceId, said, mode } = parsed.data;
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) return fail(401, "다시 로그인해 주세요.");
+
+  // RLS 덕분에 내 문장만 조회된다
+  const { data: sentence } = await supabase
+    .from("sentences")
+    .select("id, en, answer_sets(topic_id)")
+    .eq("id", sentenceId)
+    .maybeSingle();
+  if (!sentence) return fail(404, "문장을 찾을 수 없어요.");
+  const topicId = one<{ topic_id: string }>(sentence.answer_sets)?.topic_id;
+  if (!topicId) return fail(404, "문장을 찾을 수 없어요.");
+
+  let diff = compareSentences(sentence.en, said);
+  let headline = localHeadline(diff.score);
+  let tips: string[] = [];
+  let coachSkipped: FeedbackResponse["coachSkipped"] = null;
+  let usageLeft: number | null = null;
+
+  if (diff.score === 100) {
+    coachSkipped = "perfect"; // 다 맞으면 AI를 부르지 않는다
+  } else {
+    const { data: left, error } = await supabase.rpc("consume_usage");
+    if (error || (left as number) < 0) {
+      coachSkipped = "limit";
+      usageLeft = 0;
+    } else {
+      usageLeft = left as number;
+      try {
+        const coaching = await coachAttempt(sentence.en, said, diff);
+        const allowed = new Set(diff.replacements.map(pairKey));
+        const acceptable = new Set(
+          coaching.acceptable.map((r) => pairKey({ said: r.said.toLowerCase(), model: r.model.toLowerCase() })).filter((k) => allowed.has(k)),
+        );
+        if (acceptable.size) diff = compareSentences(sentence.en, said, acceptable);
+        headline = coaching.headline || localHeadline(diff.score);
+        tips = coaching.tips;
+      } catch (e) {
+        console.error("coach failed", e);
+        await supabase.rpc("refund_usage");
+        usageLeft += 1;
+        coachSkipped = "error";
+        headline = localHeadline(diff.score);
+      }
+    }
+  }
+
+  // 진도 저장: 가리고 말하기에서 기준 점수 이상이면 "외움"
+  const { data: prev } = await supabase
+    .from("sentence_progress")
+    .select("status, best_score, attempts")
+    .eq("user_id", user.id)
+    .eq("sentence_id", sentence.id)
+    .maybeSingle<{ status: SentenceStatus; best_score: number; attempts: number }>();
+  const status: SentenceStatus =
+    prev?.status === "memorized" || (mode === "hide" && diff.score >= MEMORIZED_SCORE) ? "memorized" : "practicing";
+
+  await Promise.all([
+    supabase.from("sentence_progress").upsert({
+      user_id: user.id,
+      sentence_id: sentence.id,
+      status,
+      best_score: Math.max(prev?.best_score ?? 0, diff.score),
+      attempts: (prev?.attempts ?? 0) + 1,
+      updated_at: new Date().toISOString(),
+    }),
+    supabase.from("attempts").insert({
+      user_id: user.id,
+      sentence_id: sentence.id,
+      topic_id: topicId,
+      said,
+      score: diff.score,
+      mode,
+      feedback: { headline, tips, coachSkipped },
+    }),
+  ]);
+
+  const body: FeedbackResponse = { diff, headline, tips, coachSkipped, usageLeft, status };
+  return NextResponse.json(body);
+}
