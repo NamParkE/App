@@ -1,5 +1,6 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import TopicBrowser, { type TopicItem } from "./TopicBrowser";
 import { ChevronIcon, PlayIcon } from "@/components/Icons";
 import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
 import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
@@ -32,7 +33,17 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const lastTopic = last ? topics?.find((t) => t.id === last.topic_id) : undefined;
   const lastPos = one<{ position: number }>(last?.sentences)?.position;
   const lastTotal = lastTopic ? progress.get(lastTopic.id)?.total ?? SENTENCE_COUNT[profile.level] : 0;
-  const shown = (topics ?? []).filter((t) => t.category === category);
+  const items: TopicItem[] = (topics ?? []).map((t) => {
+    const p = progress.get(t.id);
+    return {
+      id: t.id,
+      category: t.category,
+      title_ko: t.title_ko,
+      title_en: t.title_en,
+      done: p?.done ?? 0,
+      total: p?.total ?? SENTENCE_COUNT[profile.level],
+    };
+  });
 
   return (
     <main className="screen">
@@ -107,44 +118,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </Link>
         )}
 
-        <div className="row" style={{ alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
-          <h2 className="section-title">빈출 주제</h2>
-          <div style={{ display: "flex", gap: 6 }}>
-            {CATEGORIES.map((c) => (
-              <Link
-                key={c.id}
-                href={c.id === "survey" ? "/home" : `/home?cat=${c.id}`}
-                className="chip"
-                aria-current={c.id === category ? "true" : undefined}
-                replace
-              >
-                {c.label}
-              </Link>
-            ))}
-          </div>
-        </div>
-
-        <div className="list">
-          {shown.map((t) => {
-            const p = progress.get(t.id);
-            const total = p?.total ?? SENTENCE_COUNT[profile.level];
-            const done = p?.done ?? 0;
-            return (
-              <Link key={t.id} href={`/topic/${t.id}`} className="list-item">
-                <div className="row">
-                  <div style={{ fontSize: 15, fontWeight: 700 }}>
-                    {t.title_ko}{" "}
-                    <span className="en muted" style={{ fontWeight: 400, fontSize: 13 }}>{t.title_en}</span>
-                  </div>
-                  <div className="en muted" style={{ fontSize: 13 }}>{done}/{total}</div>
-                </div>
-                <div className="track">
-                  <div style={{ width: `${Math.round((done / total) * 100)}%` }} />
-                </div>
-              </Link>
-            );
-          })}
-        </div>
+        <TopicBrowser items={items} initialCat={category} />
       </div>
       <BottomNav current="/home" />
     </main>

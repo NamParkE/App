@@ -897,6 +897,13 @@ textarea.input {
   .list-item:nth-child(4), .sentence:nth-child(4) { animation-delay: 0.15s; }
   .list-item:nth-child(5), .sentence:nth-child(5) { animation-delay: 0.2s; }
   .list-item:nth-child(n + 6), .sentence:nth-child(n + 6) { animation-delay: 0.25s; }
+  /* 주제 목록은 항목이 많아서 아주 짧게만 */
+  .list > .list-item {
+    animation-duration: 0.25s;
+  }
+  .list > .list-item:nth-child(n + 2) { animation-delay: 0.02s; }
+  .list > .list-item:nth-child(n + 4) { animation-delay: 0.04s; }
+  .list > .list-item:nth-child(n + 6) { animation-delay: 0.06s; }
 
   /* 누르면 살짝 눌린다 */
   .btn,
