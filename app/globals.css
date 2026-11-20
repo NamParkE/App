@@ -19,8 +19,9 @@
   --dark-muted: #c9ced6;
   --dark-track: #343a45;
   --dark-fill: #7fa0ff;
-  --font-ko: "Noto Sans KR", system-ui, sans-serif;
-  --font-en: "Inter", "Noto Sans KR", system-ui, sans-serif;
+  /* 웹폰트를 내려받지 않고 기기 글꼴을 쓴다 (첫 화면이 빨리 뜬다) */
+  --font-ko: system-ui, -apple-system, "Roboto", "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  --font-en: "Inter", system-ui, -apple-system, "Roboto", "Noto Sans KR", sans-serif;
 }
 
 * {
@@ -880,6 +881,12 @@ textarea.input {
   .pad > *:nth-child(n + 7) { animation-delay: 0.24s; }
   .screen > .bottom { animation-delay: 0.2s; }
 
+  /* 회전하는 로딩 아이콘은 화면 열림 애니메이션 대상에서 뺀다 */
+  .pad > .spin,
+  .pad > * .spin {
+    animation: spin 0.9s linear infinite;
+  }
+
   /* 목록 항목, 문장 카드도 하나씩 */
   .list-item,
   .sentence {
@@ -979,4 +986,25 @@ textarea.input {
   }
   .tip:nth-of-type(2) { animation-delay: 0.1s; }
   .tip:nth-of-type(3) { animation-delay: 0.2s; }
+}
+
+/* ───── 듣기 속도 ───── */
+.rate {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.rate-label {
+  font-size: 13px;
+  color: var(--muted);
+  margin-right: 2px;
+}
+
+.rate .chip {
+  height: 36px;
+  min-width: 48px;
+  justify-content: center;
+  font-family: var(--font-en);
 }

@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { BackIcon, MicIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 import { speak } from "@/lib/speech";
+import RateControl from "@/components/RateControl";
 import type { Level, Sentence, SentenceStatus, Topic } from "@/lib/types";
 
 const HELP_KEY = "showHelp";
@@ -80,8 +81,14 @@ export default function TopicView({
         </div>
 
         <section className="card" aria-label="질문">
-          <div className="label">질문</div>
-          <div className="en" style={{ fontSize: 16, lineHeight: 1.5, fontWeight: 500 }}>{topic.question_en}</div>
+          <div className="row" style={{ alignItems: "center" }}>
+            <div className="label">질문</div>
+            <button type="button" className="chip" style={{ height: 36, gap: 6 }} onClick={() => speak(topic.question_en)}>
+              <SpeakerIcon size={16} />
+              질문 듣기
+            </button>
+          </div>
+          <div className="en" lang="en" style={{ fontSize: 16, lineHeight: 1.5, fontWeight: 500 }}>{topic.question_en}</div>
           <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>{topic.question_ko}</div>
         </section>
 
@@ -118,6 +125,7 @@ export default function TopicView({
                 발음·번역 보기
               </label>
             </div>
+            <RateControl />
             <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 10 }}>
               {sentences.map((s, i) => {
                 const st = statuses[s.id] ?? "todo";

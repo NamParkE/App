@@ -1,16 +1,18 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { ChevronIcon } from "@/components/Icons";
-import { requireProfile, usageToday } from "@/lib/data";
+import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
 import { LEVELS } from "@/lib/types";
 
 export default async function MePage() {
-  const { supabase, user, profile } = await requireProfile();
-  const [{ data: family }, { data: members }, used] = await Promise.all([
-    supabase.from("families").select("name, invite_code, owner_id").eq("id", profile.family_id).maybeSingle(),
-    supabase.from("profiles").select("id, display_name, level").eq("family_id", profile.family_id).order("created_at"),
-    usageToday(supabase, user.id),
+  const { supabase, userId, email } = await requireUser();
+  const [rawProfile, { data: family }, { data: members }, used] = await Promise.all([
+    fetchProfile(supabase, userId),
+    supabase.from("families").select("name, invite_code, owner_id").maybeSingle(),
+    supabase.from("profiles").select("id, display_name, level").order("created_at"),
+    usageToday(supabase, userId),
   ]);
+  const profile = checkProfile(rawProfile);
   const levelTitle = LEVELS.find((l) => l.id === profile.level)?.title;
 
   return (
@@ -56,7 +58,7 @@ export default async function MePage() {
                   <span>
                     {m.display_name}
                     {m.id === family.owner_id ? " (관리자)" : ""}
-                    {m.id === user.id ? " · 나" : ""}
+                    {m.id === userId ? " · 나" : ""}
                   </span>
                   <span className="en muted">{m.level}</span>
                 </li>
@@ -69,7 +71,7 @@ export default async function MePage() {
         <form action="/auth/signout" method="post">
           <button type="submit" className="btn btn-outline">로그아웃</button>
         </form>
-        <div className="muted en" style={{ fontSize: 12, textAlign: "center" }}>{user.email}</div>
+        <div className="muted en" style={{ fontSize: 12, textAlign: "center" }}>{email}</div>
       </div>
       <BottomNav current="/me" />
     </main>

@@ -1,18 +1,21 @@
 import { notFound } from "next/navigation";
-import { requireProfile, usageToday } from "@/lib/data";
-import { topicSentences } from "@/lib/progress";
+import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
+import { sentencesFor, topicSets } from "@/lib/progress";
 import type { Topic } from "@/lib/types";
 import TopicView from "./TopicView";
 
 export default async function TopicPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { supabase, user, profile } = await requireProfile();
-  const { data: topic } = await supabase.from("topics").select("*").eq("id", id).maybeSingle<Topic>();
-  if (!topic) notFound();
-  const [{ sentences, statuses }, used] = await Promise.all([
-    topicSentences(supabase, user.id, topic.id, profile.level),
-    usageToday(supabase, user.id),
+  const { supabase, userId } = await requireUser();
+  const [rawProfile, { data: topic }, sets, used] = await Promise.all([
+    fetchProfile(supabase, userId),
+    supabase.from("topics").select("*").eq("id", id).maybeSingle<Topic>(),
+    topicSets(supabase, userId, id),
+    usageToday(supabase, userId),
   ]);
+  const profile = checkProfile(rawProfile);
+  if (!topic) notFound();
+  const { sentences, statuses } = sentencesFor(sets, profile.level);
   return (
     <TopicView
       topic={topic}

@@ -14,6 +14,31 @@ function pickVoice(): SpeechSynthesisVoice | null {
   return cachedVoice;
 }
 
+// ───── 듣기 속도 ─────
+export const RATES = [
+  { value: 0.6, label: "0.6×" },
+  { value: 0.8, label: "0.8×" },
+  { value: 1, label: "1×" },
+  { value: 1.2, label: "1.2×" },
+] as const;
+
+const RATE_KEY = "ttsRate";
+const DEFAULT_RATE = 0.8;
+
+export function getRate(): number {
+  try {
+    const v = Number(localStorage.getItem(RATE_KEY));
+    if (RATES.some((r) => r.value === v)) return v;
+  } catch {}
+  return DEFAULT_RATE;
+}
+
+export function setRate(v: number) {
+  try {
+    localStorage.setItem(RATE_KEY, String(v));
+  } catch {}
+}
+
 export function canSpeak() {
   return typeof window !== "undefined" && "speechSynthesis" in window;
 }
@@ -24,7 +49,7 @@ export function speak(text: string, opts: { rate?: number; onEnd?: () => void } 
   synth.cancel();
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "en-US";
-  u.rate = opts.rate ?? 0.9;
+  u.rate = opts.rate ?? getRate();
   const voice = pickVoice();
   if (voice) u.voice = voice;
   if (opts.onEnd) {

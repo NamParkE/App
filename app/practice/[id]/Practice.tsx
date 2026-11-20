@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, CloseIcon, MicIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 import { canListen, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
+import RateControl from "@/components/RateControl";
 import type { Token } from "@/lib/diff";
 import type { FeedbackResponse, Mode, Sentence, SentenceStatus, Topic } from "@/lib/types";
 
@@ -340,6 +341,8 @@ export default function Practice({
             가리고 말하기
           </button>
         </div>
+
+        <RateControl />
 
         {(phase === "rec" || (phase === "thinking" && partial)) && (
           <div className="bubble" aria-live="polite">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/data";
 import { coachAttempt, describeClaudeError } from "@/lib/claude";
 import { compareSentences, pairKey } from "@/lib/diff";
 import { MEMORIZED_SCORE, one, type FeedbackResponse, type SentenceStatus } from "@/lib/types";
@@ -31,18 +31,19 @@ export async function POST(request: Request) {
   if (!parsed.success) return fail(400, "잘못된 요청이에요.");
   const { sentenceId, said, mode } = parsed.data;
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return fail(401, "다시 로그인해 주세요.");
+  const { supabase, userId } = await currentUser();
+  if (!userId) return fail(401, "다시 로그인해 주세요.");
 
-  // RLS 덕분에 내 문장만 조회된다
-  const { data: sentence } = await supabase
-    .from("sentences")
-    .select("id, en, answer_sets(topic_id)")
-    .eq("id", sentenceId)
-    .maybeSingle();
+  // 문장과 이전 진도를 한꺼번에 조회. RLS 덕분에 내 문장만 조회된다.
+  const [{ data: sentence }, { data: prev }] = await Promise.all([
+    supabase.from("sentences").select("id, en, answer_sets(topic_id)").eq("id", sentenceId).maybeSingle(),
+    supabase
+      .from("sentence_progress")
+      .select("status, best_score, attempts")
+      .eq("user_id", userId)
+      .eq("sentence_id", sentenceId)
+      .maybeSingle<{ status: SentenceStatus; best_score: number; attempts: number }>(),
+  ]);
   if (!sentence) return fail(404, "문장을 찾을 수 없어요.");
   const topicId = one<{ topic_id: string }>(sentence.answer_sets)?.topic_id;
   if (!topicId) return fail(404, "문장을 찾을 수 없어요.");
@@ -84,18 +85,12 @@ export async function POST(request: Request) {
   }
 
   // 진도 저장: 가리고 말하기에서 기준 점수 이상이면 "외움"
-  const { data: prev } = await supabase
-    .from("sentence_progress")
-    .select("status, best_score, attempts")
-    .eq("user_id", user.id)
-    .eq("sentence_id", sentence.id)
-    .maybeSingle<{ status: SentenceStatus; best_score: number; attempts: number }>();
   const status: SentenceStatus =
     prev?.status === "memorized" || (mode === "hide" && diff.score >= MEMORIZED_SCORE) ? "memorized" : "practicing";
 
   await Promise.all([
     supabase.from("sentence_progress").upsert({
-      user_id: user.id,
+      user_id: userId,
       sentence_id: sentence.id,
       status,
       best_score: Math.max(prev?.best_score ?? 0, diff.score),
@@ -103,7 +98,7 @@ export async function POST(request: Request) {
       updated_at: new Date().toISOString(),
     }),
     supabase.from("attempts").insert({
-      user_id: user.id,
+      user_id: userId,
       sentence_id: sentence.id,
       topic_id: topicId,
       said,

@@ -9,7 +9,9 @@ export default function Loading() {
         role="status"
         style={{ alignItems: "center", justifyContent: "center", gap: 12, color: "var(--muted)", fontSize: 14 }}
       >
-        <SpinnerIcon size={32} color="var(--accent)" />
+        <span style={{ display: "flex" }}>
+          <SpinnerIcon size={32} color="var(--accent)" />
+        </span>
         불러오는 중…
       </div>
     </main>

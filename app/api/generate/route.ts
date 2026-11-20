@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { currentUser } from "@/lib/data";
 import { describeClaudeError, generateSentences } from "@/lib/claude";
 import type { Profile, Topic } from "@/lib/types";
 
@@ -17,34 +17,21 @@ export async function POST(request: Request) {
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return fail(400, "잘못된 요청이에요.");
 
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return fail(401, "다시 로그인해 주세요.");
+  const { supabase, userId } = await currentUser();
+  if (!userId) return fail(401, "다시 로그인해 주세요.");
+  const topicId = parsed.data.topicId;
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, level")
-    .eq("id", user.id)
-    .maybeSingle<Pick<Profile, "id" | "level">>();
+  // 프로필·주제·기존 답변을 한꺼번에 조회 (DB 왕복 1번)
+  const [{ data: profile }, { data: topic }, { data: sets }] = await Promise.all([
+    supabase.from("profiles").select("id, level").eq("id", userId).maybeSingle<Pick<Profile, "id" | "level">>(),
+    supabase.from("topics").select("*").eq("id", topicId).maybeSingle<Topic>(),
+    supabase.from("answer_sets").select("id, level, sentences(id)").eq("user_id", userId).eq("topic_id", topicId),
+  ]);
   if (!profile) return fail(403, "가족 초대 코드로 먼저 가입해 주세요.");
-
-  const { data: topic } = await supabase
-    .from("topics")
-    .select("*")
-    .eq("id", parsed.data.topicId)
-    .maybeSingle<Topic>();
   if (!topic) return fail(404, "주제를 찾을 수 없어요.");
 
   // 이미 만든 답변이 있으면 그대로 쓴다 (AI 비용 아끼기)
-  const { data: existing } = await supabase
-    .from("answer_sets")
-    .select("id, sentences(id)")
-    .eq("user_id", user.id)
-    .eq("topic_id", topic.id)
-    .eq("level", profile.level)
-    .maybeSingle();
+  const existing = (sets ?? []).find((s) => s.level === profile.level);
   if (existing && ((existing.sentences as unknown[] | null)?.length ?? 0) > 0) {
     return NextResponse.json({ ok: true });
   }
@@ -67,7 +54,7 @@ export async function POST(request: Request) {
   if (!setId) {
     const { data: created, error } = await supabase
       .from("answer_sets")
-      .insert({ user_id: user.id, topic_id: topic.id, level: profile.level })
+      .insert({ user_id: userId, topic_id: topic.id, level: profile.level })
       .select("id")
       .single();
     if (error) {
@@ -75,7 +62,7 @@ export async function POST(request: Request) {
       const { data: again } = await supabase
         .from("answer_sets")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("topic_id", topic.id)
         .eq("level", profile.level)
         .maybeSingle();

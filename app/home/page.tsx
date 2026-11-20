@@ -1,27 +1,31 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { ChevronIcon, PlayIcon } from "@/components/Icons";
-import { requireProfile, usageToday } from "@/lib/data";
-import { SENTENCE_COUNT, topicProgress } from "@/lib/progress";
+import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
+import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
 import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ cat?: string }> }) {
   const { cat } = await searchParams;
   const category: Category = CATEGORIES.some((c) => c.id === cat) ? (cat as Category) : "survey";
-  const { supabase, user, profile } = await requireProfile();
+  const { supabase, userId } = await requireUser();
 
-  const [{ data: topics }, progress, used, { data: last }] = await Promise.all([
+  // 서로 기다릴 필요가 없는 조회를 한꺼번에 보낸다 (DB 왕복 1번)
+  const [rawProfile, { data: topics }, progressRows, used, { data: last }] = await Promise.all([
+    fetchProfile(supabase, userId),
     supabase.from("topics").select("*").order("sort").returns<Topic[]>(),
-    topicProgress(supabase, user.id, profile.level),
-    usageToday(supabase, user.id),
+    allProgress(supabase, userId),
+    usageToday(supabase, userId),
     supabase
       .from("attempts")
       .select("topic_id, sentences(position)")
-      .eq("user_id", user.id)
+      .eq("user_id", userId)
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
   ]);
+  const profile = checkProfile(rawProfile);
+  const progress = progressFor(progressRows, profile.level);
 
   const left = Math.max(0, profile.daily_limit - used);
   const leftPct = profile.daily_limit ? Math.round((left / profile.daily_limit) * 100) : 0;

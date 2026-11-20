@@ -51,6 +51,10 @@
    - `CLAUDE_MODEL`: `claude-haiku-5-5` (비워 두어도 Haiku를 씁니다)
 3. Deploy를 누릅니다.
 
+### 속도: 서버 위치
+
+`vercel.json`의 `regions`가 Vercel 서버 위치입니다. **Supabase 프로젝트와 같은 지역**이어야 빠릅니다. 서버와 DB가 멀면 화면마다 수백 ms씩 느려집니다. 현재는 `sin1`(싱가포르)로, Supabase `ap-southeast-1`에 맞춰 두었습니다. Supabase를 서울(`ap-northeast-2`)에 만들었다면 `icn1`으로 바꾸세요.
+
 ### 3. 폰에 설치
 
 1. 관리자가 안드로이드 크롬에서 배포 주소를 열고 로그인한 뒤 **새 가족 만들기**를 누릅니다.
