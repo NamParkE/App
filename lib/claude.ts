@@ -5,9 +5,56 @@ import { z } from "zod";
 import type { Level } from "./types";
 import type { DiffResult } from "./diff";
 
-const client = new Anthropic();
+export const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-haiku-5-5";
 
-export const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-5-5";
+let cached: Anthropic | null = null;
+
+// 키가 없을 때 모듈을 불러오는 순간 죽지 않도록, 처음 쓸 때 만든다.
+function client() {
+  if (!cached) {
+    const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+    if (!apiKey) throw new MissingKeyError("ANTHROPIC_API_KEY is not set");
+    cached = new Anthropic({ apiKey });
+  }
+  return cached;
+}
+
+export class MissingKeyError extends Error {}
+
+/** Claude 호출 실패를 가족(관리자 포함)이 이해할 수 있는 말로 바꾼다. */
+export function describeClaudeError(e: unknown): { status: number; message: string } {
+  if (e instanceof MissingKeyError) {
+    return { status: 500, message: "AI 키가 설정되지 않았어요. 관리자: Vercel 환경 변수 ANTHROPIC_API_KEY를 넣고 다시 배포해 주세요." };
+  }
+  if (e instanceof ClaudeRefusalError) {
+    return { status: 422, message: "이 내용은 AI가 처리할 수 없었어요. 다른 주제로 해 보세요." };
+  }
+  if (e instanceof Anthropic.AuthenticationError) {
+    return { status: 500, message: "AI 키가 올바르지 않아요. 관리자: Vercel의 ANTHROPIC_API_KEY 값을 확인하고 다시 배포해 주세요." };
+  }
+  if (e instanceof Anthropic.PermissionDeniedError) {
+    return { status: 500, message: "AI 키에 이 기능을 쓸 권한이 없어요. 관리자: Anthropic 콘솔에서 키를 확인해 주세요." };
+  }
+  if (e instanceof Anthropic.NotFoundError) {
+    return { status: 500, message: `AI 모델 이름(${MODEL})을 찾을 수 없어요. 관리자: Vercel의 CLAUDE_MODEL 값을 확인해 주세요.` };
+  }
+  if (e instanceof Anthropic.RateLimitError) {
+    return { status: 503, message: "지금 AI 요청이 많아요. 잠시 후 다시 시도해 주세요." };
+  }
+  if (e instanceof Anthropic.BadRequestError) {
+    if (/credit balance|billing|purchase credits/i.test(e.message)) {
+      return { status: 500, message: "AI 크레딧이 부족해요. 관리자: Anthropic 콘솔의 Billing에서 충전해 주세요." };
+    }
+    return { status: 500, message: "AI 요청이 거절됐어요. 관리자: Vercel 로그의 오류 내용을 확인해 주세요." };
+  }
+  if (e instanceof Anthropic.APIConnectionError) {
+    return { status: 503, message: "AI 서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요." };
+  }
+  if (e instanceof Anthropic.InternalServerError) {
+    return { status: 503, message: "AI 서버에 일시적인 문제가 있어요. 잠시 후 다시 시도해 주세요." };
+  }
+  return { status: 502, message: "AI 답변을 받지 못했어요. 잠시 후 다시 시도해 주세요." };
+}
 
 // 서버 측 거절 대체(fallback)를 지원하는 모델만 켠다. Haiku 는 지원하지 않는다.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"]);
@@ -57,7 +104,7 @@ export async function generateSentences(
   level: Level,
 ): Promise<GeneratedSentence[]> {
   const { count, guide } = LEVEL_GUIDE[level];
-  const response = await client.beta.messages.parse({
+  const response = await client().beta.messages.parse({
     model: MODEL,
     max_tokens: 8000,
     output_config: { effort: "low", format: betaZodOutputFormat(SentenceSet) },
@@ -99,7 +146,7 @@ export async function coachAttempt(
   said: string,
   diff: DiffResult,
 ): Promise<Coaching> {
-  const response = await client.beta.messages.parse({
+  const response = await client().beta.messages.parse({
     model: MODEL,
     max_tokens: 2000,
     output_config: { effort: "low", format: betaZodOutputFormat(Coaching) },

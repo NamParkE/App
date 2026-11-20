@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { coachAttempt } from "@/lib/claude";
+import { coachAttempt, describeClaudeError } from "@/lib/claude";
 import { compareSentences, pairKey } from "@/lib/diff";
 import { MEMORIZED_SCORE, one, type FeedbackResponse, type SentenceStatus } from "@/lib/types";
 
@@ -10,6 +10,9 @@ const Body = z.object({
   said: z.string().trim().min(1).max(500),
   mode: z.enum(["see", "hide"]),
 });
+
+// AI 응답을 기다릴 수 있도록 넉넉히 (Vercel 함수 최대 실행 시간, 초)
+export const maxDuration = 60;
 
 function fail(status: number, message: string) {
   return NextResponse.json({ message }, { status });
@@ -49,6 +52,7 @@ export async function POST(request: Request) {
   let tips: string[] = [];
   let coachSkipped: FeedbackResponse["coachSkipped"] = null;
   let usageLeft: number | null = null;
+  let coachError: string | null = null;
 
   if (diff.score === 100) {
     coachSkipped = "perfect"; // 다 맞으면 AI를 부르지 않는다
@@ -70,6 +74,7 @@ export async function POST(request: Request) {
         tips = coaching.tips;
       } catch (e) {
         console.error("coach failed", e);
+        coachError = describeClaudeError(e).message;
         await supabase.rpc("refund_usage");
         usageLeft += 1;
         coachSkipped = "error";
@@ -108,6 +113,6 @@ export async function POST(request: Request) {
     }),
   ]);
 
-  const body: FeedbackResponse = { diff, headline, tips, coachSkipped, usageLeft, status };
+  const body: FeedbackResponse = { diff, headline, tips, coachSkipped, coachError, usageLeft, status };
   return NextResponse.json(body);
 }

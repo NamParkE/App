@@ -271,7 +271,7 @@ export default function Practice({
             <p className="notice">오늘 AI 코치 횟수를 다 썼어요. 비교 결과는 계속 볼 수 있어요.</p>
           )}
           {result.coachSkipped === "error" && (
-            <p className="notice">코치 한마디를 불러오지 못했어요. 비교 결과만 보여 드려요.</p>
+            <p className="notice">코치 한마디를 불러오지 못했어요. 비교 결과만 보여 드려요.{result.coachError ? ` (${result.coachError})` : ""}</p>
           )}
           {result.status === "memorized" && (
             <p className="notice" style={{ background: "var(--ok-soft)", color: "var(--ok-ink)" }}>

@@ -54,6 +54,8 @@ export interface FeedbackResponse {
   tips: string[];
   /** 코치(AI)를 부르지 않은 이유: perfect = 다 맞음, limit = 오늘 한도 소진, error = AI 오류 */
   coachSkipped: "perfect" | "limit" | "error" | null;
+  /** coachSkipped 가 error 일 때 이유 */
+  coachError: string | null;
   usageLeft: number | null;
   status: SentenceStatus;
 }

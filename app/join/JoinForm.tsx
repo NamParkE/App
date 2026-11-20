@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { INVITE_KEY } from "@/lib/invite";
+import { SpinnerIcon } from "@/components/Icons";
 
 const MESSAGES: Record<string, string> = {
   invalid_code: "초대 코드를 찾을 수 없어요. 가족에게 코드를 다시 확인해 주세요.",
@@ -20,7 +21,7 @@ export default function JoinForm({ defaultName, email }: { defaultName: string; 
   const [name, setName] = useState(defaultName);
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busy, setBusy] = useState<null | "join_family" | "create_family">(null);
 
   useEffect(() => {
     try {
@@ -29,7 +30,7 @@ export default function JoinForm({ defaultName, email }: { defaultName: string; 
   }, []);
 
   async function run(fn: "join_family" | "create_family") {
-    setBusy(true);
+    setBusy(fn);
     setError(null);
     const supabase = createClient();
     const { error } =
@@ -38,7 +39,7 @@ export default function JoinForm({ defaultName, email }: { defaultName: string; 
         : await supabase.rpc("create_family", { p_display_name: name });
     if (error) {
       setError(messageFor(error.message));
-      setBusy(false);
+      setBusy(null);
       return;
     }
     try {
@@ -74,10 +75,10 @@ export default function JoinForm({ defaultName, email }: { defaultName: string; 
         <button
           type="button"
           className="btn btn-primary"
-          disabled={busy || code.trim().length !== 6 || !name.trim()}
+          disabled={!!busy || code.trim().length !== 6 || !name.trim()}
           onClick={() => run("join_family")}
         >
-          초대 코드로 들어가기
+          {busy === "join_family" ? <><SpinnerIcon color="#fff" /> 들어가는 중…</> : "초대 코드로 들어가기"}
         </button>
         <div className="divider" style={{ margin: "8px 0" }} />
         <p className="muted" style={{ margin: 0, fontSize: 14, lineHeight: 1.5 }}>
@@ -86,10 +87,10 @@ export default function JoinForm({ defaultName, email }: { defaultName: string; 
         <button
           type="button"
           className="btn btn-outline"
-          disabled={busy || !name.trim()}
+          disabled={!!busy || !name.trim()}
           onClick={() => run("create_family")}
         >
-          새 가족 만들기
+          {busy === "create_family" ? <><SpinnerIcon /> 만드는 중…</> : "새 가족 만들기"}
         </button>
         <form action="/auth/signout" method="post">
           <button type="submit" className="text-btn" style={{ width: "100%" }}>

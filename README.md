@@ -32,14 +32,15 @@
    insert into public.owner_emails (email) values ('관리자@gmail.com');
    ```
    이 이메일만 "새 가족 만들기"를 할 수 있고, 나머지 가족은 초대 코드로만 들어옵니다. 모르는 사람이 로그인해도 API를 쓸 수 없습니다.
-4. **Authentication → Providers → Google**을 켭니다. Google Cloud 콘솔에서 OAuth 클라이언트(웹 애플리케이션)를 만들고, 승인된 리디렉션 URI에 Supabase가 보여 주는 콜백 주소를 넣은 뒤 Client ID와 Secret을 붙여 넣습니다.
+4. 로그인은 **이메일 + 비밀번호**입니다. Authentication → Providers → **Email**이 켜져 있으면 됩니다 (기본값). 처음 가입할 때 한 번 확인 메일이 갑니다.
+   - (선택) Google 로그인: **Providers → Google**을 켜고 Google Cloud 콘솔의 OAuth 클라이언트 ID·Secret을 넣은 뒤, Vercel 환경 변수 `NEXT_PUBLIC_GOOGLE_LOGIN=on`을 추가하고 다시 배포하면 로그인 화면에 버튼이 나타납니다.
 5. **Authentication → URL Configuration**
    - Site URL: `https://<배포 주소>`
    - Redirect URLs: `https://<배포 주소>/auth/callback` (로컬 개발 시 `http://localhost:3000/auth/callback`도 추가)
-6. **Authentication → Emails → Magic Link** 템플릿의 링크를 아래로 바꿉니다. 메일 앱 안의 브라우저처럼, 로그인을 요청한 곳과 다른 브라우저에서 링크를 열어도 로그인됩니다.
-   ```html
-   <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">로그인하기</a>
-   ```
+6. (권장) **Authentication → Emails → SMTP Settings**에서 메일 발송 계정을 설정합니다. Gmail이라면 Host `smtp.gmail.com`, Port `587`, Username·Sender email은 Gmail 주소, Password는 [앱 비밀번호](https://myaccount.google.com/apppasswords)입니다. 기본 발송은 시간당 몇 통으로 제한되고 메일 템플릿도 바꿀 수 없습니다.
+7. (SMTP 설정 후) **Authentication → Emails → Templates**의 링크를 아래처럼 바꿉니다. 메일 앱 안의 브라우저처럼, 요청한 곳과 다른 브라우저에서 링크를 열어도 동작합니다.
+   - **Confirm signup:** `<a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">가입하고 로그인하기</a>`
+   - **Reset Password:** `<a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=recovery">비밀번호 설정하기</a>`
 
 ### 2. Vercel
 

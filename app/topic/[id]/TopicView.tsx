@@ -60,8 +60,8 @@ export default function TopicView({
       setBusy(false);
       return;
     }
+    // 성공하면 새로고침으로 문장 목록이 나타날 때까지 로딩 표시를 유지한다
     router.refresh();
-    setBusy(false);
   }
 
   // 처음으로 아직 못 외운 문장부터 연습

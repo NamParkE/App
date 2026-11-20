@@ -1,11 +1,13 @@
 import { NextResponse } from "next/server";
-import Anthropic from "@anthropic-ai/sdk";
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { ClaudeRefusalError, generateSentences } from "@/lib/claude";
+import { describeClaudeError, generateSentences } from "@/lib/claude";
 import type { Profile, Topic } from "@/lib/types";
 
 const Body = z.object({ topicId: z.string().min(1).max(64) });
+
+// AI 응답을 기다릴 수 있도록 넉넉히 (Vercel 함수 최대 실행 시간, 초)
+export const maxDuration = 60;
 
 function fail(status: number, message: string) {
   return NextResponse.json({ message }, { status });
@@ -57,9 +59,8 @@ export async function POST(request: Request) {
   } catch (e) {
     await supabase.rpc("refund_usage");
     console.error("generate failed", e);
-    if (e instanceof ClaudeRefusalError) return fail(422, "이 주제는 답변을 만들 수 없었어요.");
-    if (e instanceof Anthropic.RateLimitError) return fail(503, "요청이 많아요. 잠시 후 다시 시도해 주세요.");
-    return fail(502, "답변을 만들지 못했어요. 잠시 후 다시 시도해 주세요.");
+    const { status, message } = describeClaudeError(e);
+    return fail(status, `답변을 만들지 못했어요. ${message}`);
   }
 
   let setId = existing?.id as string | undefined;

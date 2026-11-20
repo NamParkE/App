@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { BackIcon, BookIcon, ChatIcon, CheckIcon } from "@/components/Icons";
+import { BackIcon, BookIcon, ChatIcon, CheckIcon, SpinnerIcon } from "@/components/Icons";
 import { LEVELS, type Level, type Profile } from "@/lib/types";
 
 export default function SetupForm({ profile }: { profile: Profile }) {
@@ -90,7 +90,7 @@ export default function SetupForm({ profile }: { profile: Profile }) {
       </div>
       <div className="bottom">
         <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
-          {profile.setup_done ? "저장하기" : "이대로 시작하기"}
+          {busy ? <><SpinnerIcon color="#fff" /> 저장 중…</> : profile.setup_done ? "저장하기" : "이대로 시작하기"}
         </button>
       </div>
     </main>

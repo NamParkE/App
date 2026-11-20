@@ -65,6 +65,7 @@ export default async function MePage() {
           </section>
         )}
 
+        <Link href="/password" className="btn btn-outline">비밀번호 설정·변경</Link>
         <form action="/auth/signout" method="post">
           <button type="submit" className="btn btn-outline">로그아웃</button>
         </form>
