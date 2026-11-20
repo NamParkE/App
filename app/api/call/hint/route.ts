@@ -26,7 +26,7 @@ export async function POST(request: Request) {
     const answers = await hintAnswers({ level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle });
     after(async () => {
       await saveOrLog(`hint count (lesson ${lesson.id})`, () =>
-        supabase.from("lessons").update({ hints: lesson.hints + 1 }).eq("id", lesson.id),
+        supabase.from("lessons").update({ hints: lesson.hints + 1, last_active_at: new Date().toISOString() }).eq("id", lesson.id),
       );
     });
     const body: HintResponse = { answers, hintsLeft: MAX_HINTS - lesson.hints - 1 };

@@ -3,8 +3,9 @@ import { z } from "zod";
 import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { tutorTurn } from "@/lib/call/claude";
-import { LESSON_TURNS } from "@/lib/call/levels";
+import { LESSON_TURNS, MAX_SKIPS } from "@/lib/call/levels";
 import { fail, loadLesson, saveOrLog } from "@/lib/call/server";
+import { trailingSkips } from "@/lib/call/rules";
 import type { TurnResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -23,6 +24,9 @@ export async function POST(request: Request) {
   if (lesson.status !== "active" || lesson.turns >= LESSON_TURNS) return fail(409, "이미 끝난 수업이에요.");
 
   const turnNumber = lesson.turns + 1;
+  const isLast = turnNumber >= LESSON_TURNS;
+  // 마지막 대답이거나 이미 여러 번 다시 물었으면, 이번 대답은 무엇이든 센다
+  const mustCount = isLast || trailingSkips(lesson.history) >= MAX_SKIPS;
   let out;
   try {
     out = await tutorTurn({
@@ -32,32 +36,36 @@ export async function POST(request: Request) {
       history: lesson.history,
       said: parsed.data.said,
       turnNumber,
+      mustCount,
     });
   } catch (e) {
     console.error("turn failed", e);
     const { status, message } = describeClaudeError(e);
     return fail(status, `선생님 대답을 받지 못했어요. ${message}`);
   }
+  const counted = out.onTask || mustCount;
+  const turns = counted ? turnNumber : lesson.turns;
 
   // 대화를 먼저 저장하고, 성공했을 때만 턴 수를 올린다.
   // (기록 없이 턴만 올라가면 다음 턴에서 선생님이 앞 대화를 모르게 된다)
   after(async () => {
     const saved = await saveOrLog(`turn ${turnNumber} messages (lesson ${lesson.id})`, () =>
       supabase.from("lesson_messages").insert([
-        { lesson_id: lesson.id, user_id: userId, role: "user", text: parsed.data.said },
+        { lesson_id: lesson.id, user_id: userId, role: "user", text: parsed.data.said, counted },
         { lesson_id: lesson.id, user_id: userId, role: "tutor", text: out.reply, ko: out.ko, correction: out.correction },
       ]),
     );
     if (!saved) return;
     await saveOrLog(`turn ${turnNumber} count (lesson ${lesson.id})`, () =>
-      supabase.from("lessons").update({ turns: turnNumber }).eq("id", lesson.id),
+      supabase.from("lessons").update({ turns, last_active_at: new Date().toISOString() }).eq("id", lesson.id),
     );
   });
 
   const body: TurnResponse = {
     reply: { role: "tutor", text: out.reply, ko: out.ko, correction: out.correction },
-    turns: turnNumber,
-    done: turnNumber >= LESSON_TURNS,
+    turns,
+    done: counted && isLast,
+    counted,
   };
   return NextResponse.json(body);
 }

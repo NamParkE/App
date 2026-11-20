@@ -137,3 +137,10 @@ export const BulbIcon = ({ size = 16, color = "currentColor" }: P) => (
     <path d="M12 2a7 7 0 0 0-4 12.7V16h8v-1.3A7 7 0 0 0 12 2z" />
   </svg>
 );
+
+export const InfoIcon = ({ size = 14, color = "currentColor" }: P) => (
+  <svg {...base(size, color)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v4M12 16h.01" />
+  </svg>
+);

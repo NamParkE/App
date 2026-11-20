@@ -10,7 +10,7 @@ import {
   MIN_TURNS_FOR_REPORT,
   STREAK_MILESTONES,
 } from "@/lib/call/levels";
-import { fail, loadLesson, type LoadedLesson } from "@/lib/call/server";
+import { closeLesson, fail, loadLesson, type LoadedLesson } from "@/lib/call/server";
 import type { EndResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -19,6 +19,8 @@ const Body = z.object({
   lessonId: z.string().uuid(),
   /** 화면에서 센 대답 수. 마지막 턴 저장이 아직 끝나지 않았으면 잠깐 기다린다. */
   expectedTurns: z.number().int().min(0).max(20).default(0),
+  /** 홈의 "그만두기": 리포트 없이 중도 종료로 닫는다 */
+  abandon: z.boolean().default(false),
 });
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -73,13 +75,18 @@ export async function POST(request: Request) {
     return { progress: { level: profile.call_level, good, needed: LEVEL_UP_COUNT }, suggest };
   };
 
-  // 대답이 너무 적으면 리포트 없이 끝낸다 (학습일로도 치지 않는다)
-  if (lesson.turns < MIN_TURNS_FOR_REPORT) {
-    const [, lp] = await Promise.all([
-      supabase.from("lessons").update({ status: "left", ended_at: new Date().toISOString() }).eq("id", lesson.id),
-      levelProgress(),
-    ]);
-    const body: EndResponse = { report: null, streak: before.streak, milestone: null, levelProgress: lp.progress, suggest: null };
+  // 대답이 너무 적거나 그만두면 리포트 없이 끝낸다 (학습일로도 치지 않는다). 대답이 0번이면 연습 횟수를 돌려준다
+  if (parsed.data.abandon || lesson.turns < MIN_TURNS_FOR_REPORT) {
+    const [closed, lp] = await Promise.all([closeLesson(supabase, lesson), levelProgress()]);
+    if (!closed) return fail(409, "이미 끝난 수업이에요.");
+    const body: EndResponse = {
+      report: null,
+      streak: before.streak,
+      milestone: null,
+      levelProgress: lp.progress,
+      suggest: null,
+      refunded: closed.refunded,
+    };
     return NextResponse.json(body);
   }
 
@@ -112,6 +119,6 @@ export async function POST(request: Request) {
   const milestone =
     !before.studiedToday && after.streak > before.streak && STREAK_MILESTONES.includes(after.streak) ? after.streak : null;
 
-  const body: EndResponse = { report, streak: after.streak, milestone, levelProgress: lp.progress, suggest: lp.suggest };
+  const body: EndResponse = { report, streak: after.streak, milestone, levelProgress: lp.progress, suggest: lp.suggest, refunded: false };
   return NextResponse.json(body);
 }

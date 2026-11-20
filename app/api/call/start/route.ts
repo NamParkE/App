@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { generatePlan } from "@/lib/call/claude";
 import { LESSON_USAGE_COST } from "@/lib/call/levels";
-import { fail, saveOrLog } from "@/lib/call/server";
+import { closeStale, fail, saveOrLog, splitActive, type ActiveLessonRow } from "@/lib/call/server";
 import type { LessonPlan, StartResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -20,13 +20,24 @@ export async function POST(request: Request) {
   const { supabase, userId } = await currentUser();
   if (!userId) return fail(401, "다시 로그인해 주세요.");
 
-  // 프로필 · 주제 목록 · 최근 수업을 한꺼번에
-  const [{ data: profile }, { data: topics }, { data: recent }] = await Promise.all([
+  // 프로필 · 주제 목록 · 최근 수업 · 진행 중인 수업을 한꺼번에
+  const [{ data: profile }, { data: topics }, { data: recent }, { data: active }] = await Promise.all([
     supabase.from("profiles").select("call_level, family_id").eq("id", userId).maybeSingle<{ call_level: number; family_id: string }>(),
     supabase.from("call_topics").select("*").order("sort").returns<TopicRow[]>(),
     supabase.from("lessons").select("topic_id, started_at").eq("user_id", userId).order("started_at", { ascending: false }).limit(40),
+    supabase
+      .from("lessons")
+      .select("id, topic_id, turns, started_at, last_active_at")
+      .eq("user_id", userId)
+      .eq("status", "active")
+      .returns<ActiveLessonRow[]>(),
   ]);
   if (!profile) return fail(403, "가족 초대 코드로 먼저 가입해 주세요.");
+
+  // 끊긴 통화가 30분 안이면 새 수업 대신 이어서 하게 한다. 시간이 지난 것은 닫는다 (대답 0번이면 환불)
+  const { resumable, stale } = splitActive(active ?? []);
+  if (resumable) return fail(409, "끊긴 통화가 있어요. 홈에서 이어서 하거나 그만둔 뒤 시작해 주세요.");
+  if (stale.length) await closeStale(supabase, stale);
   const level = profile.call_level;
   const forLevel = (topics ?? []).filter((t) => level >= t.level_min && level <= t.level_max);
   if (forLevel.length === 0) return fail(500, "이 레벨의 수업 주제가 없어요.");

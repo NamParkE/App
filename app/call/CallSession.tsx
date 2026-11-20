@@ -5,20 +5,22 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { canListen, getSavedRate, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
-import { callLevel, LESSON_TURNS, MAX_HINTS, MIN_TURNS_FOR_REPORT } from "@/lib/call/levels";
+import { callLevel, LESSON_TURNS, LESSON_USAGE_COST, MAX_HINTS, MAX_SOS, MIN_TURNS_FOR_REPORT } from "@/lib/call/levels";
 import type {
   ChatMessage,
   EndResponse,
   HintResponse,
   PlanExpression,
+  ResumeResponse,
   ReviewItem,
+  SosResponse,
   StartResponse,
   TurnResponse,
 } from "@/lib/call/types";
 import ReviewRunner from "@/components/ReviewRunner";
 import RateControl from "@/components/RateControl";
 import Flame, { flameBadge } from "@/components/Flame";
-import { BulbIcon, CloseIcon, MicIcon, PhoneIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
+import { BulbIcon, CheckIcon, CloseIcon, InfoIcon, MicIcon, PhoneIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 
 type Phase = "review" | "starting" | "prep" | "call" | "ending" | "report" | "error";
 type Mic = "idle" | "rec" | "waiting";
@@ -27,6 +29,8 @@ interface Shown extends ChatMessage {
   id: number;
   showText: boolean;
   showKo: boolean;
+  /** "한국어로 묻기"로 한 말 (화면에만 보이고 서버 대화에는 없다) */
+  sos?: boolean;
 }
 
 const MIC_ERRORS: Record<string, string> = {
@@ -56,16 +60,19 @@ export default function CallSession({
   level,
   name,
   topicId,
+  resumeId,
   reviewItems,
 }: {
   level: number;
   name: string;
   topicId: string | null;
+  /** 끊긴 통화 이어하기 */
+  resumeId: string | null;
   reviewItems: ReviewItem[];
 }) {
   const router = useRouter();
   const L = callLevel(level);
-  const [phase, setPhase] = useState<Phase>(reviewItems.length ? "review" : "starting");
+  const [phase, setPhase] = useState<Phase>(reviewItems.length && !resumeId ? "review" : "starting");
   const [error, setError] = useState<string | null>(null);
   const [lesson, setLesson] = useState<StartResponse | null>(null);
   const [messages, setMessages] = useState<Shown[]>([]);
@@ -76,6 +83,14 @@ export default function CallSession({
   const [hint, setHint] = useState<HintResponse | null>(null);
   const [hintBusy, setHintBusy] = useState(false);
   const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
+  const [sos, setSos] = useState<SosResponse | null>(null);
+  const [sosBusy, setSosBusy] = useState(false);
+  const [sosLeft, setSosLeft] = useState(MAX_SOS);
+  /** 지금 듣는 말이 한국어(한국어로 묻기)인지 */
+  const [listenKo, setListenKo] = useState(false);
+  const [confirmEnd, setConfirmEnd] = useState(false);
+  /** 방금 대답을 세지 않았을 때의 안내 */
+  const [skipNote, setSkipNote] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [result, setResult] = useState<EndResponse | null>(null);
@@ -87,6 +102,8 @@ export default function CallSession({
   const nextId = useRef(1);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const finished = useRef(false);
+  /** 이어하기: 통화 시작 때 보여 줄 지금까지의 대화 */
+  const resumed = useRef<ChatMessage[] | null>(null);
 
   const rate = useCallback(() => getSavedRate() ?? L.rate, [L.rate]);
 
@@ -130,10 +147,25 @@ export default function CallSession({
     return shown;
   }
 
-  // ───── 수업 시작 (사용량 차감 + 계획) ─────
+  // ───── 수업 시작 (사용량 차감 + 계획) · 또는 끊긴 통화 이어하기 ─────
   const start = useCallback(async () => {
     setPhase("starting");
     setError(null);
+    if (resumeId) {
+      const r = await post<ResumeResponse>("/api/call/resume", { lessonId: resumeId });
+      if (!r.ok) {
+        setError(r.message);
+        setPhase("error");
+        return;
+      }
+      resumed.current = r.data.history;
+      setTurns(r.data.turns);
+      setHintsLeft(r.data.hintsLeft);
+      setSosLeft(r.data.sosLeft);
+      setLesson(r.data);
+      setPhase("prep");
+      return;
+    }
     const r = await post<StartResponse>("/api/call/start", { topicId });
     if (!r.ok) {
       setError(r.message);
@@ -142,7 +174,7 @@ export default function CallSession({
     }
     setLesson(r.data);
     setPhase("prep");
-  }, [topicId]);
+  }, [topicId, resumeId]);
 
   useEffect(() => {
     if (phase === "starting" && !lesson) void start();
@@ -152,6 +184,17 @@ export default function CallSession({
   function beginCall() {
     if (!lesson) return;
     setPhase("call");
+    const history = resumed.current;
+    if (history?.length) {
+      // 이어하기: 지금까지의 대화를 보여 주고 선생님 마지막 말을 다시 들려준다
+      let last: Shown | null = null;
+      for (const m of history) {
+        const shown = addMessage(m);
+        if (m.role === "tutor") last = shown;
+      }
+      if (last) sayTutor(last);
+      return;
+    }
     const first = addMessage(lesson.opening);
     sayTutor(first);
   }
@@ -182,8 +225,10 @@ export default function CallSession({
     if (!lesson) return;
     setMic("waiting");
     setHint(null);
+    setSos(null);
+    setSkipNote(false);
     setCallError(null);
-    addMessage({ role: "user", text: said });
+    const mine = addMessage({ role: "user", text: said });
     setPartial("");
     const r = await post<TurnResponse>("/api/call/turn", { lessonId: lesson.lessonId, said });
     if (!r.ok) {
@@ -194,6 +239,10 @@ export default function CallSession({
       return;
     }
     setTurns(r.data.turns);
+    if (!r.data.counted) {
+      setMessages((list) => list.map((m) => (m.id === mine.id ? { ...m, counted: false } : m)));
+      setSkipNote(true);
+    }
     const shown = addMessage(r.data.reply);
     setMic("idle");
     // 마지막 대답이면 선생님 인사가 끝난 뒤 리포트로
@@ -201,7 +250,7 @@ export default function CallSession({
     if (r.data.done) setTimeout(() => void end(r.data.turns), 15000); // 소리가 안 나는 기기 대비
   }
 
-  function onMic() {
+  function onMic(ko = false) {
     if (mic === "rec") {
       listener.current?.stop();
       return;
@@ -211,7 +260,9 @@ export default function CallSession({
     setSpeakingId(null);
     setCallError(null);
     setPartial("");
+    setListenKo(ko);
     const l = listen({
+      lang: ko ? "ko-KR" : "en-US",
       onPartial: setPartial,
       onDone: (text) => {
         listener.current = null;
@@ -220,7 +271,7 @@ export default function CallSession({
           setMic("idle");
           return;
         }
-        void send(text.trim());
+        void (ko ? askSos(text.trim()) : send(text.trim()));
       },
       onError: (code) => {
         listener.current = null;
@@ -234,6 +285,34 @@ export default function CallSession({
     }
     listener.current = l;
     setMic("rec");
+  }
+
+  // ───── 한국어로 묻기 (대답 수에는 넣지 않는다) ─────
+  async function askSos(said: string) {
+    if (!lesson) return;
+    setMic("waiting");
+    setSosBusy(true);
+    setHint(null);
+    setSos(null);
+    setPartial("");
+    const mine = addMessage({ role: "user", text: said });
+    setMessages((list) => list.map((m) => (m.id === mine.id ? { ...m, sos: true } : m)));
+    const r = await post<SosResponse>("/api/call/sos", { lessonId: lesson.lessonId, said });
+    setSosBusy(false);
+    setMic("idle");
+    if (!r.ok) {
+      setCallError(r.message);
+      setMessages((list) => list.filter((m) => m.id !== mine.id));
+      return;
+    }
+    setSos(r.data);
+    setSosLeft(r.data.sosLeft);
+    speak(r.data.answer.en, { rate: rate() });
+  }
+
+  function onEndPress() {
+    if (turns >= MIN_TURNS_FOR_REPORT) void end(turns);
+    else setConfirmEnd(true);
   }
 
   async function askHint() {
@@ -347,7 +426,7 @@ export default function CallSession({
         <div className="bottom">
           <button type="button" className="btn btn-primary" onClick={beginCall}>
             <PhoneIcon color="#FFFFFF" />
-            통화 시작
+            {resumeId ? `통화 이어하기 (대답 ${turns}/${LESSON_TURNS})` : "통화 시작"}
           </button>
         </div>
       </main>
@@ -371,10 +450,7 @@ export default function CallSession({
           <button
             type="button"
             className="end-btn"
-            onClick={() => {
-              const enough = turns >= MIN_TURNS_FOR_REPORT;
-              if (enough || confirm(`대답이 ${MIN_TURNS_FOR_REPORT}번보다 적으면 리포트 없이 끝나요. 끝낼까요?`)) void end(turns);
-            }}
+            onClick={onEndPress}
             disabled={phase === "ending"}
           >
             끝내기
@@ -416,14 +492,22 @@ export default function CallSession({
                 )}
               </div>
             ) : (
-              <div key={m.id} className="msg user">
-                <div className="msg-bubble en" lang="en">{m.text}</div>
+              <div key={m.id} className={`msg user${m.sos ? " sos" : ""}${m.counted === false ? " skipped" : ""}`}>
+                {m.sos && <div className="msg-label">한국어로 물었어요</div>}
+                <div className={`msg-bubble${m.sos ? "" : " en"}`} lang={m.sos ? "ko" : "en"}>{m.text}</div>
+                {m.counted === false && (
+                  <div className="skip-chip">
+                    <InfoIcon /> 대답 수에 넣지 않았어요
+                  </div>
+                )}
               </div>
             ),
           )}
           {mic === "rec" && (
             <div className="msg user">
-              <div className="msg-bubble en pending" lang="en">{partial || "듣는 중…"}</div>
+              <div className={`msg-bubble pending${listenKo ? "" : " en"}`} lang={listenKo ? "ko" : "en"}>
+                {partial || (listenKo ? "한국어로 말해 보세요…" : "듣는 중…")}
+              </div>
             </div>
           )}
           {mic === "waiting" && (
@@ -450,6 +534,24 @@ export default function CallSession({
                 </div>
               ))}
             </div>
+          )}
+          {sos && (
+            <section className="card hint-card" aria-label="영어로는 이렇게 말해요">
+              <div className="label">영어로는 이렇게 말해요</div>
+              <div className="row" style={{ alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <div className="en" lang="en" style={{ fontWeight: 600, fontSize: 17 }}>{sos.answer.en}</div>
+                  <div className="ko-line">{sos.answer.ko}</div>
+                </div>
+                <button type="button" className="round-btn" aria-label="예시 듣기" onClick={() => speak(sos.answer.en, { rate: rate() })}>
+                  <SpeakerIcon size={18} />
+                </button>
+              </div>
+              <div className="muted" style={{ fontSize: 13 }}>듣고 마이크를 눌러 따라 말해 보세요. 그러면 대답 1번으로 세요.</div>
+            </section>
+          )}
+          {skipNote && mic === "idle" && (
+            <p className="skip-note">질문에 맞게 대답하면 <b className="en">{turns + 1}/{LESSON_TURNS}</b>로 넘어가요</p>
           )}
           {phase === "ending" && (
             <div className="muted" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "center", padding: 12, fontSize: 14 }}>
@@ -479,12 +581,21 @@ export default function CallSession({
             <button type="button" onClick={() => void askHint()} disabled={hintBusy || hintsLeft <= 0 || mic !== "idle" || phase === "ending"}>
               {hintBusy ? <SpinnerIcon size={16} /> : <BulbIcon />} 힌트 <span className="en muted">{hintsLeft}</span>
             </button>
+            <button
+              type="button"
+              className="sos-btn"
+              aria-label={`한국어로 묻기, ${sosLeft}번 남음`}
+              onClick={() => onMic(true)}
+              disabled={sosBusy || sosLeft <= 0 || mic !== "idle" || phase === "ending" || !listenOk}
+            >
+              {sosBusy ? <SpinnerIcon size={16} /> : null} 한국어로 <span className="en muted">{sosLeft}</span>
+            </button>
           </div>
           <button
             type="button"
             className={`mic${mic === "rec" ? " rec" : ""}${mic === "waiting" ? " thinking" : ""}`}
             aria-label={mic === "rec" ? "녹음 멈추기" : "녹음 시작"}
-            onClick={onMic}
+            onClick={() => onMic(false)}
             disabled={mic === "waiting" || phase === "ending" || !listenOk}
           >
             {mic === "rec" ? (
@@ -499,12 +610,46 @@ export default function CallSession({
             {!listenOk
               ? "이 브라우저는 음성 인식을 지원하지 않아요. 크롬에서 열어 주세요."
               : mic === "rec"
-                ? "다 말했으면 버튼을 눌러 멈추세요"
+                ? listenKo
+                  ? "한국어로 말하고, 다 말했으면 버튼을 눌러 멈추세요"
+                  : "다 말했으면 버튼을 눌러 멈추세요"
                 : mic === "waiting"
                   ? "선생님이 대답을 준비하고 있어요"
                   : "선생님 말이 끝나면 버튼을 누르고 대답하세요"}
           </div>
         </div>
+        {confirmEnd && (
+          <div className="sheet-backdrop" onClick={() => setConfirmEnd(false)}>
+            <div className="sheet" role="dialog" aria-modal="true" aria-label="통화를 끝낼까요" onClick={(e) => e.stopPropagation()}>
+              <h2 className="section-title" style={{ fontSize: 20 }}>통화를 끝낼까요?</h2>
+              <div className="card" style={{ fontSize: 14, lineHeight: 1.5 }}>
+                <div>
+                  <b>대답 {MIN_TURNS_FOR_REPORT}번</b>부터 리포트와 연속 학습일이 생겨요. 지금은 <b>{turns}번</b>이라 리포트 없이 끝나요.
+                </div>
+              </div>
+              {turns === 0 ? (
+                <div className="refund-note ok">
+                  <CheckIcon size={18} color="var(--ok-ink)" /> 아직 대답을 안 해서 오늘 연습 {LESSON_USAGE_COST}회를 돌려드려요
+                </div>
+              ) : (
+                <div className="refund-note">대답을 이미 해서 연습 {LESSON_USAGE_COST}회는 돌려드리지 않아요</div>
+              )}
+              <div className="btn-row">
+                <button type="button" className="btn btn-outline" onClick={() => setConfirmEnd(false)}>계속하기</button>
+                <button
+                  type="button"
+                  className="btn btn-warn"
+                  onClick={() => {
+                    setConfirmEnd(false);
+                    void end(turns);
+                  }}
+                >
+                  끝내기
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </main>
     );
   }
@@ -531,6 +676,11 @@ export default function CallSession({
               <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
                 대답이 {MIN_TURNS_FOR_REPORT}번보다 적어서 리포트 없이 끝났어요. 다음엔 끝까지 이야기해 봐요!
               </div>
+              {result.refunded && (
+                <div className="refund-note ok">
+                  <CheckIcon size={18} color="var(--ok-ink)" /> 오늘 연습 {LESSON_USAGE_COST}회를 돌려드렸어요
+                </div>
+              )}
             </section>
           ) : (
             <>
@@ -619,7 +769,7 @@ export default function CallSession({
               {showTranscript && (
                 <section className="card">
                   <div className="label">대화 다시 보기</div>
-                  {messages.map((m) => (
+                  {messages.filter((m) => !m.sos).map((m) => (
                     <div key={m.id} style={{ fontSize: 14, lineHeight: 1.5 }}>
                       <b>{m.role === "tutor" ? "Emma" : name}</b> <span className="en" lang="en">{m.text}</span>
                     </div>

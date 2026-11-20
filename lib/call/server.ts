@@ -1,7 +1,11 @@
 import "server-only";
 import { NextResponse } from "next/server";
-import type { DB } from "../data";
+import { todayKst, type DB } from "../data";
 import { one } from "../types";
+import { LESSON_USAGE_COST } from "./levels";
+import type { ActiveLessonRow } from "./rules";
+
+export { isResumable, splitActive, type ActiveLessonRow } from "./rules";
 import type { ChatMessage, LessonPlan } from "./types";
 
 export function fail(status: number, message: string) {
@@ -14,8 +18,12 @@ export interface LoadedLesson {
   level: number;
   turns: number;
   hints: number;
+  sos: number;
+  startedAt: string;
+  lastActiveAt: string;
   topicId: string;
   topicTitle: string;
+  topicTitleKo: string;
   plan: LessonPlan;
   history: ChatMessage[];
 }
@@ -25,18 +33,19 @@ export async function loadLesson(supabase: DB, lessonId: string): Promise<Loaded
   const [{ data: lesson }, { data: messages }] = await Promise.all([
     supabase
       .from("lessons")
-      .select("id, status, level, turns, hints, topic_id, lesson_plans(plan), call_topics(title_en)")
+      .select("id, status, level, turns, hints, sos, started_at, last_active_at, topic_id, lesson_plans(plan), call_topics(title_en, title_ko)")
       .eq("id", lessonId)
       .maybeSingle(),
     supabase
       .from("lesson_messages")
-      .select("role, text, ko, correction")
+      .select("role, text, ko, correction, counted")
       .eq("lesson_id", lessonId)
       .order("id"),
   ]);
   if (!lesson) return null;
   const plan = one<{ plan: LessonPlan }>(lesson.lesson_plans)?.plan;
-  const topicTitle = one<{ title_en: string }>(lesson.call_topics)?.title_en ?? "";
+  const topic = one<{ title_en: string; title_ko: string }>(lesson.call_topics);
+  const topicTitle = topic?.title_en ?? "";
   if (!plan) return null;
   return {
     id: lesson.id as string,
@@ -44,8 +53,12 @@ export async function loadLesson(supabase: DB, lessonId: string): Promise<Loaded
     level: lesson.level as number,
     turns: lesson.turns as number,
     hints: lesson.hints as number,
+    sos: (lesson.sos as number) ?? 0,
+    startedAt: lesson.started_at as string,
+    lastActiveAt: (lesson.last_active_at as string) ?? (lesson.started_at as string),
     topicId: lesson.topic_id as string,
     topicTitle,
+    topicTitleKo: topic?.title_ko ?? "",
     plan,
     history: (messages ?? []) as ChatMessage[],
   };
@@ -66,4 +79,42 @@ export async function saveOrLog(label: string, run: () => PromiseLike<{ error: u
     }
   }
   return false;
+}
+
+// ───── 끊긴 통화 · 중도 종료 ─────
+
+/** 한국 시간 기준 날짜 */
+function kstDay(iso: string) {
+  return new Date(new Date(iso).getTime() + 9 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
+
+/**
+ * 진행 중인 수업을 중도 종료(left)로 닫는다. 대답을 한 번도 안 했으면 연습 횟수를 돌려준다.
+ * 사용량은 날마다 따로 세므로, 오늘 시작한 수업만 돌려준다 (어제 차감분을 오늘 돌려주지 않는다).
+ * 이미 닫힌 수업이면(동시에 두 번 불려도) 아무것도 하지 않고 null.
+ */
+export async function closeLesson(
+  supabase: DB,
+  lesson: { id: string; turns: number; startedAt: string },
+): Promise<{ refunded: boolean } | null> {
+  const { data: closed, error } = await supabase
+    .from("lessons")
+    .update({ status: "left", ended_at: new Date().toISOString() })
+    .eq("id", lesson.id)
+    .eq("status", "active")
+    .select("id");
+  if (error) {
+    console.error(`[call] close lesson ${lesson.id} failed`, error);
+    return null;
+  }
+  if (!closed?.length) return null;
+  if (lesson.turns > 0 || kstDay(lesson.startedAt) !== todayKst()) return { refunded: false };
+  const refunded = await saveOrLog(`refund (lesson ${lesson.id})`, () =>
+    supabase.rpc("refund_usage", { p_n: LESSON_USAGE_COST }),
+  );
+  return { refunded };
+}
+
+export function closeStale(supabase: DB, stale: ActiveLessonRow[]) {
+  return Promise.all(stale.map((r) => closeLesson(supabase, { id: r.id, turns: r.turns, startedAt: r.started_at })));
 }
