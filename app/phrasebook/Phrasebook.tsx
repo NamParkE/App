@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
@@ -89,7 +90,7 @@ export default function Phrasebook({ rows, today }: { rows: PhraseRow[]; today: 
               ["learned", "익힌 것"],
             ] as const
           ).map(([id, label]) => (
-            <button key={id} type="button" className="chip" aria-pressed={filter === id} aria-current={filter === id ? "true" : undefined} onClick={() => setFilter(id)}>
+            <button key={id} type="button" className="chip" aria-pressed={filter === id} aria-current={filter === id ? "true" : undefined} onClick={() => { setFilter(id); playSfx("tap"); }}>
               {label}
             </button>
           ))}

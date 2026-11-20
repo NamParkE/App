@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -58,12 +59,12 @@ export default function SetupForm({ profile }: { profile: Profile }) {
         </h1>
 
         <div className="style-grid">
-          <button type="button" className="choice style-card" aria-pressed={style === "memorize"} onClick={() => setStyle("memorize")}>
+          <button type="button" className="choice style-card" aria-pressed={style === "memorize"} onClick={() => { setStyle("memorize"); playSfx("tap"); }}>
             <ChatIcon color={style === "memorize" ? "var(--accent)" : "#6B7280"} />
             <div className="choice-title">오픽 암기형</div>
             <div className="choice-desc">핵심 답변을 말하며 외우기</div>
           </button>
-          <button type="button" className="choice style-card" aria-pressed={style === "vocab"} onClick={() => setStyle("vocab")}>
+          <button type="button" className="choice style-card" aria-pressed={style === "vocab"} onClick={() => { setStyle("vocab"); playSfx("tap"); }}>
             <PhoneIcon size={26} color={style === "vocab" ? "var(--accent)" : "#6B7280"} />
             <div className="choice-title">어휘 확장형</div>
             <div className="choice-desc">전화영어처럼 AI 선생님과 대화</div>
@@ -76,7 +77,7 @@ export default function SetupForm({ profile }: { profile: Profile }) {
             <p className="subtitle" style={{ marginTop: -6 }}>등급에 맞춰 답변 문장의 길이와 표현을 바꿔 드려요.</p>
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
               {LEVELS.map((l) => (
-                <button key={l.id} type="button" className="choice" aria-pressed={level === l.id} onClick={() => setLevel(l.id)}>
+                <button key={l.id} type="button" className="choice" aria-pressed={level === l.id} onClick={() => { setLevel(l.id); playSfx("tap"); }}>
                   <div className="tag">{l.id}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 2, flexGrow: 1 }}>
                     <div className="choice-title">{l.title}</div>
@@ -104,7 +105,7 @@ export default function SetupForm({ profile }: { profile: Profile }) {
                     role="radio"
                     aria-checked={callLevel === l.n}
                     className="level-pick"
-                    onClick={() => setCallLevel(l.n)}
+                    onClick={() => { setCallLevel(l.n); playSfx("tap"); }}
                   >
                     <span className="level-tag en">Lv.{l.n}</span>
                     <span style={{ display: "flex", flexDirection: "column", minWidth: 0, textAlign: "left" }}>

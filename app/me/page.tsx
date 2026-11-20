@@ -1,5 +1,6 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
+import SoundSettings from "@/components/SoundSettings";
 import { ChevronIcon } from "@/components/Icons";
 import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
 import { LEVELS } from "@/lib/types";
@@ -74,6 +75,8 @@ export default async function MePage() {
             </ul>
           </section>
         )}
+
+        <SoundSettings />
 
         <Link href="/phrasebook" className="btn btn-outline">표현장</Link>
         <Link href="/password" className="btn btn-outline">비밀번호 설정·변경</Link>

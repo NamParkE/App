@@ -1,3 +1,5 @@
+import { playSfx, recStartDelay, setRecording, setSpeaking } from "./sfx";
+
 // 브라우저 내장 음성 합성(TTS)·인식(STT). 안드로이드 크롬 기준. API 비용 없음.
 
 let cachedVoice: SpeechSynthesisVoice | null | undefined;
@@ -58,20 +60,24 @@ export function speak(text: string, opts: { rate?: number; onEnd?: () => void } 
   if (!canSpeak()) return;
   const synth = window.speechSynthesis;
   synth.cancel();
+  setSpeaking(true);
   const u = new SpeechSynthesisUtterance(text);
   u.lang = "en-US";
   u.rate = opts.rate ?? getRate();
   const voice = pickVoice();
   if (voice) u.voice = voice;
-  if (opts.onEnd) {
-    u.onend = opts.onEnd;
-    u.onerror = opts.onEnd;
-  }
+  const done = () => {
+    setSpeaking(false);
+    opts.onEnd?.();
+  };
+  u.onend = done;
+  u.onerror = done;
   synth.speak(u);
 }
 
 export function stopSpeaking() {
   if (canSpeak()) window.speechSynthesis.cancel();
+  setSpeaking(false);
 }
 
 // ───── 음성 인식 ─────
@@ -141,21 +147,51 @@ export function listen(handlers: {
     handlers.onPartial([...finals.filter(Boolean), interim.trim()].filter(Boolean).join(" "));
   };
   rec.onerror = (e) => {
+    setRecording(false);
     if (e.error === "aborted") return;
     if (e.error === "no-speech") return; // onend 에서 빈 결과로 처리
     failed = true;
     handlers.onError(e.error);
   };
   rec.onend = () => {
+    setRecording(false);
     if (failed) return;
+    playSfx("recStop");
     handlers.onDone([...finals.filter(Boolean), interim.trim()].filter(Boolean).join(" "));
   };
-  rec.start();
+  // 녹음 시작 소리를 먼저 내고, 소리가 끝난 뒤 녹음을 시작한다 (효과음이 마이크에 섞이지 않게)
+  playSfx("recStart");
+  let started = false;
+  let cancelled = false;
+  const begin = () => {
+    if (cancelled) return;
+    try {
+      rec.start();
+      started = true;
+      setRecording(true);
+    } catch {
+      failed = true;
+      handlers.onError("start-failed");
+    }
+  };
+  const delay = recStartDelay();
+  if (delay) setTimeout(begin, delay);
+  else begin();
   return {
-    stop: () => rec.stop(),
+    stop: () => {
+      if (!started) {
+        // 녹음이 시작되기 전에 멈춤: 아무 말도 안 한 것으로 처리
+        cancelled = true;
+        handlers.onDone("");
+        return;
+      }
+      rec.stop();
+    },
     abort: () => {
       failed = true;
-      rec.abort();
+      cancelled = true;
+      setRecording(false);
+      if (started) rec.abort();
     },
   };
 }

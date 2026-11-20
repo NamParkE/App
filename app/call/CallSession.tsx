@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -153,8 +154,10 @@ export default function CallSession({
   function beginCall() {
     if (!lesson) return;
     setPhase("call");
+    playSfx("connect");
     const first = addMessage(lesson.opening);
-    sayTutor(first);
+    // 전화 연결음이 끝난 뒤 리피가 말한다
+    setTimeout(() => sayTutor(first), 650);
   }
 
   // ───── 수업 끝내기 → 리포트 ─────
@@ -163,6 +166,7 @@ export default function CallSession({
       if (!lesson || finished.current) return;
       finished.current = true;
       listener.current?.abort();
+      playSfx("hangup");
       setPhase("ending");
       const r = await post<EndResponse>("/api/call/end", { lessonId: lesson.lessonId, expectedTurns });
       if (!r.ok) {
@@ -173,7 +177,12 @@ export default function CallSession({
       }
       setResult(r.data);
       setPhase("report");
-      if (r.data.milestone) setShowCelebration(true);
+      if (r.data.milestone) {
+        setShowCelebration(true);
+        playSfx("streak");
+      } else if (r.data.report) {
+        playSfx("lessonDone");
+      }
     },
     [lesson],
   );
@@ -197,8 +206,9 @@ export default function CallSession({
     setTurns(r.data.turns);
     const shown = addMessage(r.data.reply);
     setMic("idle");
-    // 마지막 대답이면 선생님 인사가 끝난 뒤 리포트로
-    sayTutor(shown, r.data.done ? () => void end(r.data.turns) : undefined);
+    // 짹짹 소리로 대답 도착을 알리고, 이어서 리피가 말한다. 마지막 대답이면 인사가 끝난 뒤 리포트로
+    playSfx("chirp");
+    setTimeout(() => sayTutor(shown, r.data.done ? () => void end(r.data.turns) : undefined), 220);
     if (r.data.done) setTimeout(() => void end(r.data.turns), 15000); // 소리가 안 나는 기기 대비
   }
 
@@ -246,6 +256,7 @@ export default function CallSession({
       setCallError(r.message);
       return;
     }
+    playSfx("hint");
     setHint(r.data);
     setHintsLeft(r.data.hintsLeft);
   }
@@ -262,6 +273,7 @@ export default function CallSession({
       .from("profiles")
       .update({ call_level: to, call_level_since: new Date().toISOString() })
       .eq("id", (await createClient().auth.getUser()).data.user?.id ?? "");
+    if (!error) playSfx(to > (lesson?.level ?? 0) ? "levelUp" : "tap");
     setLevelNote(error ? "레벨을 바꾸지 못했어요. 내 정보에서 바꿀 수 있어요." : `Lv.${to} ${callLevel(to).name}(으)로 바꿨어요. 다음 수업부터 적용돼요.`);
   }
 

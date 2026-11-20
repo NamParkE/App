@@ -178,11 +178,21 @@ export default function Reppy({
   );
 }
 
-/** 리피 + 말풍선 한 줄 (홈, 빈 화면 등) */
-export function ReppySays({ mood, children, size = 64 }: { mood: ReppyMood; children: React.ReactNode; size?: number }) {
+/** 리피 + 말풍선 한 줄 (홈, 빈 화면 등). mascot 을 넘기면 그 리피(예: 누를 수 있는 리피)를 쓴다 */
+export function ReppySays({
+  mood,
+  children,
+  size = 64,
+  mascot,
+}: {
+  mood: ReppyMood;
+  children: React.ReactNode;
+  size?: number;
+  mascot?: React.ReactNode;
+}) {
   return (
     <div className="reppy-says">
-      <Reppy mood={mood} size={size} />
+      {mascot ?? <Reppy mood={mood} size={size} />}
       <div className="reppy-bubble">{children}</div>
     </div>
   );
