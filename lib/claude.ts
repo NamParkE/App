@@ -7,7 +7,7 @@ import type { DiffResult } from "./diff";
 
 const client = new Anthropic();
 
-export const MODEL = process.env.CLAUDE_MODEL || "claude-opus-5-5";
+export const MODEL = process.env.CLAUDE_MODEL || "claude-haiku-5-5";
 
 // 서버 측 거절 대체(fallback)를 지원하는 모델만 켠다. Haiku 는 지원하지 않는다.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"]);

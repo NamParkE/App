@@ -19,7 +19,7 @@
 
 - **AI 호출은 두 가지뿐입니다:** 주제별 답변 만들기(주제·등급마다 한 번만 하고 저장)와 틀린 문장의 코치 한마디. 다 맞게 말하면 AI를 부르지 않습니다.
 - **사용자마다 하루 한도가 있습니다:** 기본 30회이고 한국 시간 자정에 다시 채워집니다. 한도를 다 쓰면 단어 비교 결과만 보여 줍니다.
-- **모델:** `CLAUDE_MODEL` 환경 변수로 정합니다. 대략적인 추정으로, 가족 4명이 매일 한도를 다 쓰면(월 3,600회) `claude-opus-5-5`는 월 수만 원, `claude-haiku-5-5`는 월 수천 원 수준입니다. 월 2만 원 목표라면 Haiku로 시작해 품질을 보고 결정하세요. 실제 사용량은 Anthropic 콘솔에서 확인하세요.
+- **모델:** 기본은 `claude-haiku-5-5`입니다. 대략적인 추정으로, 가족 4명이 매일 한도를 다 쓰면(월 3,600회) 월 수천 원 수준입니다. 품질을 더 높이려면 `CLAUDE_MODEL=claude-opus-5-5`로 바꿀 수 있지만 비용이 약 40배라 월 수만 원이 될 수 있습니다. 실제 사용량은 Anthropic 콘솔에서 확인하세요.
 
 ## 처음 설정하기 (한 번만)
 
@@ -43,7 +43,7 @@
 2. Environment Variables에 [`.env.example`](.env.example)의 항목을 넣습니다.
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase → Project Settings → API
    - `ANTHROPIC_API_KEY`: Anthropic 콘솔에서 발급. 서버에서만 쓰이고 브라우저로 나가지 않습니다.
-   - `CLAUDE_MODEL`: 예) `claude-haiku-5-5`
+   - `CLAUDE_MODEL`: `claude-haiku-5-5` (비워 두어도 Haiku를 씁니다)
 3. Deploy를 누릅니다.
 
 ### 3. 폰에 설치
