@@ -5,6 +5,16 @@ import { createClient } from "@/lib/supabase/client";
 import { GlobeIcon, MicIcon } from "@/components/Icons";
 import { INVITE_KEY } from "@/lib/invite";
 
+function loginErrorMessage(code: string) {
+  if (/otp_expired|expired|already|invalid_token|access_denied/i.test(code)) {
+    return "로그인 링크가 만료됐거나 이미 사용됐어요. 새 링크를 받아, 가장 최근 메일의 링크를 한 번만 눌러 주세요.";
+  }
+  if (/pkce|code_verifier|flow_state/i.test(code)) {
+    return "로그인을 요청한 브라우저와 다른 곳에서 링크가 열렸어요. 크롬에서 다시 요청하고, 메일의 링크를 길게 눌러 크롬에서 열어 주세요.";
+  }
+  return "로그인하지 못했어요. 새 링크를 받아 다시 시도해 주세요.";
+}
+
 export default function LoginPage() {
   const [mode, setMode] = useState<"main" | "email" | "code">("main");
   const [email, setEmail] = useState("");
@@ -17,9 +27,11 @@ export default function LoginPage() {
     try {
       setCode(localStorage.getItem(INVITE_KEY) ?? "");
     } catch {}
-    if (new URLSearchParams(location.search).get("error")) {
-      setError("로그인하지 못했어요. 다시 시도해 주세요.");
-    }
+    // Supabase 는 오류를 ?error_code= 또는 #error_code= 로 돌려줄 수 있다
+    const params = new URLSearchParams(location.search);
+    const hash = new URLSearchParams(location.hash.slice(1));
+    const code = params.get("error") ?? hash.get("error_code") ?? hash.get("error");
+    if (code) setError(loginErrorMessage(code));
   }, []);
 
   const redirectTo = () => `${location.origin}/auth/callback`;
