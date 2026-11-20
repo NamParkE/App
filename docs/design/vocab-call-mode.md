@@ -2,7 +2,7 @@
 
 - 의도: [`docs/intent/vocab-call-mode.md`](../intent/vocab-call-mode.md)
 - 화면 시안: https://claude.ai/artifact/Fc9gEgeyV5PhMpDenusH2K (화면 7개)
-- 상태: **설계 초안, 사용자 승인 전.** 승인 전에는 구현하지 않는다.
+- 상태: **승인됨 (2026-11-20), 구현 완료.** §10의 결정은 초안 그대로 승인됨.
 
 ## 1. 한눈에 보기
 

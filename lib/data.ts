@@ -6,7 +6,7 @@ import type { Profile } from "./types";
 
 export type DB = Awaited<ReturnType<typeof createClient>>;
 
-const PROFILE_COLUMNS = "id, family_id, display_name, level, style, daily_limit, setup_done";
+const PROFILE_COLUMNS = "id, family_id, display_name, level, style, daily_limit, setup_done, call_level, call_level_since";
 
 /**
  * 로그인한 사용자. getClaims() 는 로그인 토큰을 서버에서 바로 검증해서
@@ -62,4 +62,10 @@ export async function usageToday(supabase: DB, userId: string) {
     .eq("day", todayKst())
     .maybeSingle<{ count: number }>();
   return data?.count ?? 0;
+}
+
+/** 내 연속 학습일 (DB 함수 한 번) */
+export async function myStreak(supabase: DB) {
+  const { data } = await supabase.rpc("my_streak").maybeSingle<{ streak: number; studied_today: boolean }>();
+  return { streak: data?.streak ?? 0, studiedToday: data?.studied_today ?? false };
 }

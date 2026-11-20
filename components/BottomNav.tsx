@@ -1,13 +1,13 @@
 import Link from "next/link";
-import { ChartIcon, HomeIcon, UserIcon } from "./Icons";
+import { FamilyIcon, HomeIcon, UserIcon } from "./Icons";
 
 const ITEMS = [
   { href: "/home", label: "학습", Icon: HomeIcon },
-  { href: "/history", label: "기록", Icon: ChartIcon },
+  { href: "/family", label: "가족", Icon: FamilyIcon },
   { href: "/me", label: "내 정보", Icon: UserIcon },
 ];
 
-export default function BottomNav({ current }: { current: "/home" | "/history" | "/me" }) {
+export default function BottomNav({ current }: { current: "/home" | "/family" | "/me" }) {
   return (
     <nav className="nav" aria-label="주 메뉴">
       {ITEMS.map(({ href, label, Icon }) => (

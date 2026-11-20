@@ -10,7 +10,7 @@ export const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-haiku-5-5";
 let cached: Anthropic | null = null;
 
 // 키가 없을 때 모듈을 불러오는 순간 죽지 않도록, 처음 쓸 때 만든다.
-function client() {
+export function client() {
   if (!cached) {
     const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
     if (!apiKey) throw new MissingKeyError("ANTHROPIC_API_KEY is not set");
@@ -59,7 +59,7 @@ export function describeClaudeError(e: unknown): { status: number; message: stri
 // 서버 측 거절 대체(fallback)를 지원하는 모델만 켠다. Haiku 는 지원하지 않는다.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"]);
 
-function fallbackParams() {
+export function fallbackParams() {
   return FALLBACK_MODELS.has(MODEL)
     ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
     : {};

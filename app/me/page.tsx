@@ -24,7 +24,15 @@ export default async function MePage() {
           <div style={{ display: "flex", flexDirection: "column", gap: 2, flexGrow: 1 }}>
             <div style={{ fontSize: 16, fontWeight: 700 }}>{profile.display_name}</div>
             <div className="muted" style={{ fontSize: 13 }}>
-              목표 <span className="en">{profile.level}</span> · {levelTitle} · 오픽 암기형
+              {profile.style === "vocab" ? (
+                <>
+                  전화영어 · <span className="en">Lv.{profile.call_level}</span>
+                </>
+              ) : (
+                <>
+                  오픽 암기형 · 목표 <span className="en">{profile.level}</span> · {levelTitle}
+                </>
+              )}
             </div>
           </div>
           <span className="muted" style={{ fontSize: 13 }}>바꾸기</span>
@@ -37,7 +45,7 @@ export default async function MePage() {
             <span className="en" style={{ fontWeight: 700 }}>{used}</span> / {profile.daily_limit}회 사용
           </div>
           <div className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
-            답변 만들기와 AI 코치 한마디가 1회씩 차감돼요. 다 맞게 말하면 차감되지 않아요.
+            답변 만들기와 AI 코치 한마디는 1회, 전화영어 수업은 시작할 때 5회 차감돼요. 다 맞게 말하면 차감되지 않아요.
           </div>
         </section>
 
@@ -67,6 +75,7 @@ export default async function MePage() {
           </section>
         )}
 
+        <Link href="/phrasebook" className="btn btn-outline">표현장</Link>
         <Link href="/password" className="btn btn-outline">비밀번호 설정·변경</Link>
         <form action="/auth/signout" method="post">
           <button type="submit" className="btn btn-outline">로그아웃</button>

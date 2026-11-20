@@ -1,9 +1,15 @@
 # 오픽 암기
 
 가족이 함께 쓰는 영어 말하기 학습 웹앱(PWA)입니다. 첫 버전은 **오픽 암기형** 모드입니다.
-빈출 주제마다 목표 등급(IM2 / IH / AL)에 맞는 핵심 답변 문장을 만들고, 마이크로 따라 말하면 모범 문장과 비교해 피드백합니다.
+학습 스타일은 두 가지입니다.
+
+- **오픽 암기형:** 빈출 주제마다 목표 등급(IM2 / IH / AL)에 맞는 핵심 답변 문장을 만들고, 마이크로 따라 말하면 모범 문장과 비교해 피드백합니다.
+- **어휘 확장형 (전화영어):** 레벨 1(아이 수준)~8(원어민)에 맞춰 AI 선생님 Emma와 버튼 방식으로 10분 대화합니다. 수업 뒤 리포트, 교정 노트, 표현장, 복습을 제공합니다.
+
+두 모드 모두 연속 학습일(불꽃)과 가족 주간 순위에 반영됩니다.
 
 - 기획 의도와 승인된 화면 시안: [`docs/intent/english-opic-app.md`](docs/intent/english-opic-app.md)
+- 전화영어 모드: 의도 [`docs/intent/vocab-call-mode.md`](docs/intent/vocab-call-mode.md), 설계 [`docs/design/vocab-call-mode.md`](docs/design/vocab-call-mode.md)
 
 ## 구성
 
@@ -17,7 +23,8 @@
 
 ### 비용 관리
 
-- **AI 호출은 두 가지뿐입니다:** 주제별 답변 만들기(주제·등급마다 한 번만 하고 저장)와 틀린 문장의 코치 한마디. 다 맞게 말하면 AI를 부르지 않습니다.
+- **오픽 암기형의 AI 호출은 두 가지뿐입니다:** 주제별 답변 만들기(주제·등급마다 한 번만 하고 저장)와 틀린 문장의 코치 한마디. 다 맞게 말하면 AI를 부르지 않습니다.
+- **전화영어 수업은 시작할 때 사용량 5회를 차감**하고, 수업 중 대화·힌트·리포트는 추가로 차감하지 않습니다 (수업 1회 Haiku 기준 약 7원). 수업 계획은 주제·레벨마다 한 번 만들어 가족이 함께 씁니다.
 - **사용자마다 하루 한도가 있습니다:** 기본 30회이고 한국 시간 자정에 다시 채워집니다. 한도를 다 쓰면 단어 비교 결과만 보여 줍니다.
 - **모델:** 기본은 `claude-haiku-5-5`입니다. 대략적인 추정으로, 가족 4명이 매일 한도를 다 쓰면(월 3,600회) 월 수천 원 수준입니다. 품질을 더 높이려면 `CLAUDE_MODEL=claude-opus-5-5`로 바꿀 수 있지만 비용이 약 40배라 월 수만 원이 될 수 있습니다. 실제 사용량은 Anthropic 콘솔에서 확인하세요.
 
@@ -26,7 +33,7 @@
 ### 1. Supabase
 
 1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 지역은 Northeast Asia (Seoul)를 추천합니다.
-2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
+2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
 3. 같은 곳에서 관리자(가족 계정을 만들 사람) 이메일을 등록합니다.
    ```sql
    insert into public.owner_emails (email) values ('관리자@gmail.com');

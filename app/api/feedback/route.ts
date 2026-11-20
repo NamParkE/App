@@ -1,4 +1,4 @@
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/data";
 import { coachAttempt, describeClaudeError } from "@/lib/claude";
@@ -107,6 +107,11 @@ export async function POST(request: Request) {
       feedback: { headline, tips, coachSkipped },
     }),
   ]);
+
+  const newlyMemorized = status === "memorized" && prev?.status !== "memorized";
+  after(async () => {
+    await supabase.rpc("bump_activity", { p_practices: 1, p_memorized: newlyMemorized ? 1 : 0 });
+  });
 
   const body: FeedbackResponse = { diff, headline, tips, coachSkipped, coachError, usageLeft, status };
   return NextResponse.json(body);

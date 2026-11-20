@@ -1,0 +1,675 @@
+"use client";
+
+import Link from "next/link";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { createClient } from "@/lib/supabase/client";
+import { canListen, getSavedRate, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
+import { callLevel, LESSON_TURNS, MAX_HINTS, MIN_TURNS_FOR_REPORT } from "@/lib/call/levels";
+import type {
+  ChatMessage,
+  EndResponse,
+  HintResponse,
+  PlanExpression,
+  ReviewItem,
+  StartResponse,
+  TurnResponse,
+} from "@/lib/call/types";
+import ReviewRunner from "@/components/ReviewRunner";
+import RateControl from "@/components/RateControl";
+import Flame, { flameBadge } from "@/components/Flame";
+import { BulbIcon, CloseIcon, MicIcon, PhoneIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
+
+type Phase = "review" | "starting" | "prep" | "call" | "ending" | "report" | "error";
+type Mic = "idle" | "rec" | "waiting";
+
+interface Shown extends ChatMessage {
+  id: number;
+  showText: boolean;
+  showKo: boolean;
+}
+
+const MIC_ERRORS: Record<string, string> = {
+  "not-allowed": "마이크 권한이 꺼져 있어요. 설정에서 이 앱의 마이크를 허용해 주세요.",
+  "service-not-allowed": "마이크 권한이 꺼져 있어요. 설정에서 이 앱의 마이크를 허용해 주세요.",
+  "audio-capture": "마이크를 찾을 수 없어요.",
+  network: "음성 인식에 인터넷 연결이 필요해요.",
+};
+
+async function post<T>(url: string, body: unknown): Promise<{ ok: true; data: T } | { ok: false; message: string }> {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify(body),
+  }).catch(() => null);
+  if (!res) return { ok: false, message: "인터넷 연결을 확인해 주세요." };
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) return { ok: false, message: data.message ?? "잠시 후 다시 시도해 주세요." };
+  return { ok: true, data: data as T };
+}
+
+function mmss(sec: number) {
+  return `${String(Math.floor(sec / 60)).padStart(2, "0")}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+export default function CallSession({
+  level,
+  name,
+  topicId,
+  reviewItems,
+}: {
+  level: number;
+  name: string;
+  topicId: string | null;
+  reviewItems: ReviewItem[];
+}) {
+  const router = useRouter();
+  const L = callLevel(level);
+  const [phase, setPhase] = useState<Phase>(reviewItems.length ? "review" : "starting");
+  const [error, setError] = useState<string | null>(null);
+  const [lesson, setLesson] = useState<StartResponse | null>(null);
+  const [messages, setMessages] = useState<Shown[]>([]);
+  const [turns, setTurns] = useState(0);
+  const [mic, setMic] = useState<Mic>("idle");
+  const [partial, setPartial] = useState("");
+  const [speakingId, setSpeakingId] = useState<number | null>(null);
+  const [hint, setHint] = useState<HintResponse | null>(null);
+  const [hintBusy, setHintBusy] = useState(false);
+  const [hintsLeft, setHintsLeft] = useState(MAX_HINTS);
+  const [callError, setCallError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const [result, setResult] = useState<EndResponse | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
+  const [showTranscript, setShowTranscript] = useState(false);
+  const [levelNote, setLevelNote] = useState<string | null>(null);
+  const [listenOk, setListenOk] = useState(true);
+  const listener = useRef<Listener | null>(null);
+  const nextId = useRef(1);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
+  const finished = useRef(false);
+
+  const rate = useCallback(() => getSavedRate() ?? L.rate, [L.rate]);
+
+  useEffect(() => {
+    setListenOk(canListen());
+    return () => {
+      listener.current?.abort();
+      stopSpeaking();
+    };
+  }, []);
+
+  // 통화 시간
+  useEffect(() => {
+    if (phase !== "call") return;
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, [phase]);
+
+  // 새 말풍선이 생기면 아래로
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+  }, [messages.length, partial, mic, hint]);
+
+  const sayTutor = useCallback(
+    (m: Shown, after?: () => void) => {
+      setSpeakingId(m.id);
+      speak(m.text, {
+        rate: rate(),
+        onEnd: () => {
+          setSpeakingId((cur) => (cur === m.id ? null : cur));
+          after?.();
+        },
+      });
+    },
+    [rate],
+  );
+
+  function addMessage(m: ChatMessage): Shown {
+    const shown: Shown = { ...m, id: nextId.current++, showText: m.role === "user" || L.captions, showKo: false };
+    setMessages((list) => [...list, shown]);
+    return shown;
+  }
+
+  // ───── 수업 시작 (사용량 차감 + 계획) ─────
+  const start = useCallback(async () => {
+    setPhase("starting");
+    setError(null);
+    const r = await post<StartResponse>("/api/call/start", { topicId });
+    if (!r.ok) {
+      setError(r.message);
+      setPhase("error");
+      return;
+    }
+    setLesson(r.data);
+    setPhase("prep");
+  }, [topicId]);
+
+  useEffect(() => {
+    if (phase === "starting" && !lesson) void start();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function beginCall() {
+    if (!lesson) return;
+    setPhase("call");
+    const first = addMessage(lesson.opening);
+    sayTutor(first);
+  }
+
+  // ───── 수업 끝내기 → 리포트 ─────
+  const end = useCallback(
+    async (expectedTurns: number) => {
+      if (!lesson || finished.current) return;
+      finished.current = true;
+      listener.current?.abort();
+      setPhase("ending");
+      const r = await post<EndResponse>("/api/call/end", { lessonId: lesson.lessonId, expectedTurns });
+      if (!r.ok) {
+        finished.current = false;
+        setCallError(r.message);
+        setPhase("call");
+        return;
+      }
+      setResult(r.data);
+      setPhase("report");
+      if (r.data.milestone) setShowCelebration(true);
+    },
+    [lesson],
+  );
+
+  // ───── 내 대답 보내기 ─────
+  async function send(said: string) {
+    if (!lesson) return;
+    setMic("waiting");
+    setHint(null);
+    setCallError(null);
+    addMessage({ role: "user", text: said });
+    setPartial("");
+    const r = await post<TurnResponse>("/api/call/turn", { lessonId: lesson.lessonId, said });
+    if (!r.ok) {
+      // 내 말풍선은 남기고, 다시 말할 수 있게 한다
+      setCallError(r.message);
+      setMessages((list) => list.slice(0, -1));
+      setMic("idle");
+      return;
+    }
+    setTurns(r.data.turns);
+    const shown = addMessage(r.data.reply);
+    setMic("idle");
+    // 마지막 대답이면 선생님 인사가 끝난 뒤 리포트로
+    sayTutor(shown, r.data.done ? () => void end(r.data.turns) : undefined);
+    if (r.data.done) setTimeout(() => void end(r.data.turns), 15000); // 소리가 안 나는 기기 대비
+  }
+
+  function onMic() {
+    if (mic === "rec") {
+      listener.current?.stop();
+      return;
+    }
+    if (mic !== "idle") return;
+    stopSpeaking();
+    setSpeakingId(null);
+    setCallError(null);
+    setPartial("");
+    const l = listen({
+      onPartial: setPartial,
+      onDone: (text) => {
+        listener.current = null;
+        if (!text.trim()) {
+          setCallError("잘 들리지 않았어요. 버튼을 누르고 다시 말해 보세요.");
+          setMic("idle");
+          return;
+        }
+        void send(text.trim());
+      },
+      onError: (code) => {
+        listener.current = null;
+        setCallError(MIC_ERRORS[code] ?? "음성 인식이 멈췄어요. 다시 시도해 주세요.");
+        setMic("idle");
+      },
+    });
+    if (!l) {
+      setListenOk(false);
+      return;
+    }
+    listener.current = l;
+    setMic("rec");
+  }
+
+  async function askHint() {
+    if (!lesson || hintBusy || hintsLeft <= 0) return;
+    setHintBusy(true);
+    const r = await post<HintResponse>("/api/call/hint", { lessonId: lesson.lessonId });
+    setHintBusy(false);
+    if (!r.ok) {
+      setCallError(r.message);
+      return;
+    }
+    setHint(r.data);
+    setHintsLeft(r.data.hintsLeft);
+  }
+
+  const lastTutor = [...messages].reverse().find((m) => m.role === "tutor");
+
+  function toggle(id: number, key: "showText" | "showKo") {
+    setMessages((list) => list.map((m) => (m.id === id ? { ...m, [key]: !m[key] } : m)));
+  }
+
+  async function changeLevel(to: number) {
+    const { error } = await createClient()
+      .from("profiles")
+      .update({ call_level: to, call_level_since: new Date().toISOString() })
+      .eq("id", (await createClient().auth.getUser()).data.user?.id ?? "");
+    setLevelNote(error ? "레벨을 바꾸지 못했어요. 내 정보에서 바꿀 수 있어요." : `Lv.${to} ${callLevel(to).name}(으)로 바꿨어요. 다음 수업부터 적용돼요.`);
+  }
+
+  // ───── 화면 ─────
+
+  if (phase === "review") {
+    return (
+      <main className="screen">
+        <div className="pad">
+          <div className="topbar">
+            <Link href="/home" className="icon-btn" aria-label="닫기">
+              <CloseIcon />
+            </Link>
+            <h1>수업 전 복습</h1>
+          </div>
+          <ReviewRunner items={reviewItems} onDone={() => void start()} doneLabel="수업 시작하기" />
+          <button type="button" className="text-btn" onClick={() => void start()}>
+            복습 건너뛰고 수업 시작
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (phase === "starting" || phase === "error") {
+    return (
+      <main className="screen">
+        <div className="pad" style={{ justifyContent: "center", alignItems: "center", textAlign: "center", gap: 14 }}>
+          {phase === "starting" ? (
+            <>
+              <span style={{ display: "flex" }}>
+                <SpinnerIcon size={32} color="var(--accent)" />
+              </span>
+              <div className="muted">Emma 선생님과 연결하는 중…</div>
+            </>
+          ) : (
+            <>
+              <p className="error" role="alert">{error}</p>
+              <div className="btn-row" style={{ width: "100%" }}>
+                <Link href="/home" className="btn btn-outline">홈으로</Link>
+                <button type="button" className="btn btn-primary" onClick={() => void start()}>다시 시도</button>
+              </div>
+            </>
+          )}
+        </div>
+      </main>
+    );
+  }
+
+  if (phase === "prep" && lesson) {
+    return (
+      <main className="screen">
+        <div className="pad">
+          <div className="topbar">
+            <Link href="/home" className="icon-btn" aria-label="닫기">
+              <CloseIcon />
+            </Link>
+            <h1>오늘의 수업</h1>
+            <span className="badge">Lv.{lesson.level}</span>
+          </div>
+          <section className="card">
+            <div className="label">주제</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{lesson.topic.title_ko}</div>
+            <div className="en muted" style={{ fontSize: 14 }}>{lesson.topic.title_en} · 대답 {LESSON_TURNS}번 · 약 10분</div>
+          </section>
+          <section className="card">
+            <div className="label">미리 들어 볼 핵심 표현</div>
+            {lesson.expressions.map((e: PlanExpression) => (
+              <div key={e.en} className="row" style={{ alignItems: "center" }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                  <div className="en" lang="en" style={{ fontWeight: 600, fontSize: 15 }}>{e.en}</div>
+                  <div className="ko-line">{e.ko}</div>
+                </div>
+                <button type="button" className="round-btn" aria-label={`${e.en} 듣기`} onClick={() => speak(e.example || e.en, { rate: rate() })}>
+                  <SpeakerIcon />
+                </button>
+              </div>
+            ))}
+          </section>
+          <RateControl />
+          <p className="muted" style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>
+            선생님 말이 끝나면 마이크 버튼을 누르고 대답하세요. 막히면 힌트를 눌러도 돼요.
+          </p>
+        </div>
+        <div className="bottom">
+          <button type="button" className="btn btn-primary" onClick={beginCall}>
+            <PhoneIcon color="#FFFFFF" />
+            통화 시작
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if ((phase === "call" || phase === "ending") && lesson) {
+    return (
+      <main className="screen call-screen">
+        <header className="call-head">
+          <div className="avatar en" aria-hidden="true">Em</div>
+          <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 15, fontWeight: 700 }}>
+              Emma 선생님 <span className="en" style={{ fontSize: 12, color: "var(--accent)" }}>Lv.{lesson.level}</span>
+            </div>
+            <div className="call-status">
+              <span className="dot" aria-hidden="true" />
+              통화 중 <span className="en">{mmss(elapsed)}</span> · 대답 <span className="en">{turns}/{LESSON_TURNS}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="end-btn"
+            onClick={() => {
+              const enough = turns >= MIN_TURNS_FOR_REPORT;
+              if (enough || confirm(`대답이 ${MIN_TURNS_FOR_REPORT}번보다 적으면 리포트 없이 끝나요. 끝낼까요?`)) void end(turns);
+            }}
+            disabled={phase === "ending"}
+          >
+            끝내기
+          </button>
+        </header>
+
+        <div className="chat" aria-live="polite">
+          {messages.map((m) =>
+            m.role === "tutor" ? (
+              <div key={m.id} className={`msg tutor${speakingId === m.id ? " speaking" : ""}`}>
+                <div className="msg-bubble">
+                  {speakingId === m.id && (
+                    <div className="speaking-label">
+                      <SpeakerIcon size={14} /> 말하는 중
+                    </div>
+                  )}
+                  {m.showText ? (
+                    <div className="en" lang="en">{m.text}</div>
+                  ) : (
+                    <div className="hidden-lines" aria-label="자막이 가려져 있어요">
+                      <div style={{ width: "92%" }} />
+                      <div style={{ width: "64%" }} />
+                    </div>
+                  )}
+                  {m.showKo && m.ko && <div className="ko-line" style={{ fontSize: 14 }}>{m.ko}</div>}
+                  <div className="msg-tools">
+                    <button type="button" onClick={() => toggle(m.id, "showText")}>{m.showText ? "자막 숨기기" : "자막 보기"}</button>
+                    {m.ko && <button type="button" onClick={() => toggle(m.id, "showKo")}>{m.showKo ? "뜻 숨기기" : "한글 뜻"}</button>}
+                    <button type="button" aria-label="다시 듣기" onClick={() => sayTutor(m)}>
+                      <SpeakerIcon size={14} />
+                    </button>
+                  </div>
+                </div>
+                {m.correction && (
+                  <div className="fix-chip">
+                    <span className="en">{m.correction.wrong} → {m.correction.right}</span>
+                    {m.correction.note}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div key={m.id} className="msg user">
+                <div className="msg-bubble en" lang="en">{m.text}</div>
+              </div>
+            ),
+          )}
+          {mic === "rec" && (
+            <div className="msg user">
+              <div className="msg-bubble en pending" lang="en">{partial || "듣는 중…"}</div>
+            </div>
+          )}
+          {mic === "waiting" && (
+            <div className="msg tutor">
+              <div className="msg-bubble typing" aria-label="선생님이 대답을 준비하고 있어요">
+                <span /><span /><span />
+              </div>
+            </div>
+          )}
+          {hint && (
+            <div className="card hint-card">
+              <div className="label" style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                <BulbIcon /> 이렇게 말해 보세요
+              </div>
+              {hint.answers.map((a) => (
+                <div key={a.en} className="row" style={{ alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, minWidth: 0 }}>
+                    <div className="en" lang="en" style={{ fontWeight: 600 }}>{a.en}</div>
+                    <div className="ko-line">{a.ko}</div>
+                  </div>
+                  <button type="button" className="round-btn" aria-label="예시 듣기" onClick={() => speak(a.en, { rate: rate() })}>
+                    <SpeakerIcon size={18} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+          {phase === "ending" && (
+            <div className="muted" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "center", padding: 12, fontSize: 14 }}>
+              <SpinnerIcon color="var(--accent)" /> 리포트를 만드는 중…
+            </div>
+          )}
+          {callError && <p className="error" role="alert">{callError}</p>}
+          <div ref={bottomRef} />
+        </div>
+
+        <div className="call-controls">
+          <div className="help-row">
+            <button type="button" onClick={() => lastTutor && sayTutor(lastTutor)} disabled={!lastTutor || phase === "ending"}>
+              <ReplayIcon size={16} /> 다시 듣기
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                if (!lastTutor) return;
+                setSpeakingId(lastTutor.id);
+                speak(lastTutor.text, { rate: 0.6, onEnd: () => setSpeakingId(null) });
+              }}
+              disabled={!lastTutor || phase === "ending"}
+            >
+              천천히 <span className="en muted">0.6×</span>
+            </button>
+            <button type="button" onClick={() => void askHint()} disabled={hintBusy || hintsLeft <= 0 || mic !== "idle" || phase === "ending"}>
+              {hintBusy ? <SpinnerIcon size={16} /> : <BulbIcon />} 힌트 <span className="en muted">{hintsLeft}</span>
+            </button>
+          </div>
+          <button
+            type="button"
+            className={`mic${mic === "rec" ? " rec" : ""}${mic === "waiting" ? " thinking" : ""}`}
+            aria-label={mic === "rec" ? "녹음 멈추기" : "녹음 시작"}
+            onClick={onMic}
+            disabled={mic === "waiting" || phase === "ending" || !listenOk}
+          >
+            {mic === "rec" ? (
+              <span style={{ width: 28, height: 28, borderRadius: 6, background: "#fff" }} />
+            ) : mic === "waiting" ? (
+              <SpinnerIcon size={32} color="#FFFFFF" />
+            ) : (
+              <MicIcon size={34} color="#FFFFFF" />
+            )}
+          </button>
+          <div className="muted" style={{ fontSize: 13 }}>
+            {!listenOk
+              ? "이 브라우저는 음성 인식을 지원하지 않아요. 크롬에서 열어 주세요."
+              : mic === "rec"
+                ? "다 말했으면 버튼을 눌러 멈추세요"
+                : mic === "waiting"
+                  ? "선생님이 대답을 준비하고 있어요"
+                  : "선생님 말이 끝나면 버튼을 누르고 대답하세요"}
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // ───── 리포트 ─────
+  if (phase === "report" && result) {
+    const r = result.report;
+    const lp = result.levelProgress;
+    return (
+      <main className="screen">
+        <div className="pad" style={{ gap: 12 }}>
+          <div className="row" style={{ alignItems: "center" }}>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>수업 리포트</h1>
+            <span className="streak-chip">
+              <Flame streak={result.streak} size={20} />
+              <b className="en">{result.streak}</b>
+              <span>일</span>
+            </span>
+          </div>
+
+          {!r ? (
+            <section className="card">
+              <div style={{ fontSize: 16, fontWeight: 700 }}>짧게 끝난 수업이에요</div>
+              <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
+                대답이 {MIN_TURNS_FOR_REPORT}번보다 적어서 리포트 없이 끝났어요. 다음엔 끝까지 이야기해 봐요!
+              </div>
+            </section>
+          ) : (
+            <>
+              <section className="card" style={{ gap: 12 }}>
+                <div className="row" style={{ alignItems: "center" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+                    <div className="muted" style={{ fontSize: 13 }}>{lesson?.topic.title_ko} · Lv.{lesson?.level}</div>
+                    <div style={{ fontSize: 18, fontWeight: 700 }}>{r.headline}</div>
+                  </div>
+                  <div className="score" style={{ fontSize: 40 }}>{r.score}</div>
+                </div>
+                <div className="parts">
+                  {(
+                    [
+                      ["알아듣기", r.parts.listening],
+                      ["표현", r.parts.expression],
+                      ["정확성", r.parts.accuracy],
+                      ["말하기 양", r.parts.amount],
+                    ] as const
+                  ).map(([label, v]) => (
+                    <div key={label} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+                      <div className="row" style={{ fontSize: 12 }}>
+                        <span className="muted">{label}</span>
+                        <b className="en">{v}/25</b>
+                      </div>
+                      <div className="track">
+                        <div style={{ width: `${(v / 25) * 100}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+
+              <section className="usage" style={{ flexDirection: "row", alignItems: "center", gap: 12, padding: "14px 16px" }}>
+                <div className="segments" role="img" aria-label={`80점 이상 ${lp.good}/${lp.needed}`}>
+                  {Array.from({ length: lp.needed }, (_, i) => (
+                    <div key={i} className={i < lp.good ? "on" : undefined} />
+                  ))}
+                </div>
+                <div style={{ fontSize: 14, flexGrow: 1 }}>
+                  {result.suggest === "up" ? "80점 이상 3번 달성!" : result.suggest === "down" ? "조금 어려웠나요?" : `80점 이상 ${lp.good}/${lp.needed}`}
+                </div>
+                {result.suggest === "up" && !levelNote && (
+                  <button type="button" className="level-btn" onClick={() => void changeLevel(lp.level + 1)}>
+                    Lv.{lp.level + 1} 도전
+                  </button>
+                )}
+                {result.suggest === "down" && !levelNote && (
+                  <button type="button" className="level-btn" onClick={() => void changeLevel(lp.level - 1)}>
+                    Lv.{lp.level - 1}로
+                  </button>
+                )}
+              </section>
+              {levelNote && <p className="notice">{levelNote}</p>}
+
+              {r.corrections.length > 0 && (
+                <section className="card">
+                  <div className="label">교정 노트</div>
+                  {r.corrections.map((c, i) => (
+                    <div key={i} style={{ display: "flex", flexDirection: "column", gap: 4, paddingTop: i ? 8 : 0, borderTop: i ? "1px solid var(--line-soft)" : undefined }}>
+                      <div className="en muted" lang="en" style={{ fontSize: 14, textDecoration: "line-through" }}>{c.said}</div>
+                      <div className="row" style={{ alignItems: "center" }}>
+                        <div className="en" lang="en" style={{ fontSize: 15, fontWeight: 600 }}>{c.better}</div>
+                        <button type="button" className="round-btn" aria-label="고친 문장 듣기" onClick={() => speak(c.better, { rate: rate() })}>
+                          <SpeakerIcon size={18} />
+                        </button>
+                      </div>
+                      <div className="ko-line">{c.note}</div>
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {r.expressions.length > 0 && (
+                <section className="card">
+                  <div className="label">오늘의 새 표현 · 표현장에 저장됨</div>
+                  {r.expressions.map((e) => (
+                    <div key={e.en} className="row" style={{ fontSize: 14 }}>
+                      <span className="en" lang="en" style={{ fontWeight: 600 }}>{e.en}</span>
+                      <span className="muted">{e.ko}</span>
+                    </div>
+                  ))}
+                </section>
+              )}
+
+              {showTranscript && (
+                <section className="card">
+                  <div className="label">대화 다시 보기</div>
+                  {messages.map((m) => (
+                    <div key={m.id} style={{ fontSize: 14, lineHeight: 1.5 }}>
+                      <b>{m.role === "tutor" ? "Emma" : name}</b> <span className="en" lang="en">{m.text}</span>
+                    </div>
+                  ))}
+                </section>
+              )}
+            </>
+          )}
+        </div>
+        <div className="bottom btn-row">
+          {r && (
+            <button type="button" className="btn btn-outline" onClick={() => setShowTranscript((v) => !v)}>
+              {showTranscript ? "대화 접기" : "대화 다시 보기"}
+            </button>
+          )}
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={() => {
+              router.replace("/home");
+              router.refresh();
+            }}
+          >
+            완료
+          </button>
+        </div>
+
+        {showCelebration && result.milestone && (
+          <div className="celebrate" role="dialog" aria-modal="true" aria-label={`${result.milestone}일 연속 학습`}>
+            <div className="celebrate-flame">
+              <Flame streak={result.milestone} size={120} />
+            </div>
+            {flameBadge(result.milestone) && <div className="celebrate-badge">{flameBadge(result.milestone)} 배지 획득</div>}
+            <div className="celebrate-num en">
+              {result.milestone}
+              <span>일</span>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>연속으로 학습했어요!</div>
+            <div style={{ color: "var(--dark-muted)", fontSize: 15, textAlign: "center", lineHeight: 1.5 }}>
+              내일도 한 통화 해요!
+            </div>
+            <div style={{ flexGrow: 1 }} />
+            <button type="button" className="btn" style={{ background: "#fff", color: "var(--ink)" }} onClick={() => setShowCelebration(false)}>
+              계속하기
+            </button>
+          </div>
+        )}
+      </main>
+    );
+  }
+
+  return null;
+}

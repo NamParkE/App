@@ -2,7 +2,9 @@ import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import TopicBrowser, { type TopicItem } from "./TopicBrowser";
 import { ChevronIcon, PlayIcon } from "@/components/Icons";
-import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
+import { checkProfile, fetchProfile, myStreak, requireUser, todayKst, usageToday } from "@/lib/data";
+import { StreakChip } from "@/components/Flame";
+import CallHome, { type CallTopic, type LessonRow } from "./CallHome";
 import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
 import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
 
@@ -11,24 +13,54 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const category: Category = CATEGORIES.some((c) => c.id === cat) ? (cat as Category) : "survey";
   const { supabase, userId } = await requireUser();
 
-  // 서로 기다릴 필요가 없는 조회를 한꺼번에 보낸다 (DB 왕복 1번)
-  const [rawProfile, { data: topics }, progressRows, used, { data: last }] = await Promise.all([
-    fetchProfile(supabase, userId),
-    supabase.from("topics").select("*").order("sort").returns<Topic[]>(),
-    allProgress(supabase, userId),
-    usageToday(supabase, userId),
-    supabase
-      .from("attempts")
-      .select("topic_id, sentences(position)")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle(),
-  ]);
+  // 서로 기다릴 필요가 없는 조회를 한꺼번에 보낸다 (DB 왕복 1번).
+  // 학습 스타일을 몰라도 되도록 두 모드에 필요한 조회를 모두 함께 보낸다 (작은 조회라 동시에 보내는 편이 빠르다).
+  const [rawProfile, { data: topics }, progressRows, used, { data: last }, streak, { data: callTopics }, { data: lessons }, { count: dueCount }] =
+    await Promise.all([
+      fetchProfile(supabase, userId),
+      supabase.from("topics").select("*").order("sort").returns<Topic[]>(),
+      allProgress(supabase, userId),
+      usageToday(supabase, userId),
+      supabase
+        .from("attempts")
+        .select("topic_id, sentences(position)")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle(),
+      myStreak(supabase),
+      supabase.from("call_topics").select("id, level_min, level_max, title_ko, title_en, sort").order("sort").returns<CallTopic[]>(),
+      supabase
+        .from("lessons")
+        .select("id, topic_id, level, status, score, started_at")
+        .eq("user_id", userId)
+        .order("started_at", { ascending: false })
+        .limit(40)
+        .returns<LessonRow[]>(),
+      supabase
+        .from("expressions")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .lte("next_review_on", todayKst()),
+    ]);
   const profile = checkProfile(rawProfile);
+  const left = Math.max(0, profile.daily_limit - used);
+
+  if (profile.style === "vocab") {
+    return (
+      <CallHome
+        profile={profile}
+        streak={streak}
+        topics={callTopics ?? []}
+        lessons={lessons ?? []}
+        dueCount={dueCount ?? 0}
+        usageLeft={left}
+      />
+    );
+  }
+
   const progress = progressFor(progressRows, profile.level);
 
-  const left = Math.max(0, profile.daily_limit - used);
   const leftPct = profile.daily_limit ? Math.round((left / profile.daily_limit) * 100) : 0;
   const lastTopic = last ? topics?.find((t) => t.id === last.topic_id) : undefined;
   const lastPos = one<{ position: number }>(last?.sentences)?.position;
@@ -51,41 +83,11 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         <div className="row" style={{ alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div className="muted" style={{ fontSize: 14 }}>{profile.display_name}님, 오늘도 한 주제씩</div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>오픽 암기형</h1>
+            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>
+              오픽 암기형 <span className="badge" style={{ verticalAlign: "middle" }}>{profile.level}</span>
+            </h1>
           </div>
-          <Link
-            href="/me"
-            aria-label="내 정보"
-            style={{
-              height: 44,
-              padding: "0 12px 0 4px",
-              borderRadius: 999,
-              border: "1px solid var(--line)",
-              background: "var(--surface)",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              textDecoration: "none",
-            }}
-          >
-            <span
-              style={{
-                width: 34,
-                height: 34,
-                borderRadius: 999,
-                background: "var(--accent-soft)",
-                color: "var(--accent-ink)",
-                fontWeight: 700,
-                fontSize: 15,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              {profile.display_name.slice(0, 1)}
-            </span>
-            <span className="en" style={{ fontWeight: 700, fontSize: 14, color: "var(--accent)" }}>{profile.level}</span>
-          </Link>
+          <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
 
         <section className="usage" aria-label="오늘 남은 연습">

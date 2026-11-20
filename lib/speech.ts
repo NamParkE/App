@@ -33,6 +33,17 @@ export function getRate(): number {
   return DEFAULT_RATE;
 }
 
+/** 사용자가 직접 고른 속도. 고른 적 없으면 null (전화영어는 레벨 기본 속도를 쓴다) */
+export function getSavedRate(): number | null {
+  try {
+    const raw = localStorage.getItem(RATE_KEY);
+    if (raw === null) return null;
+    const v = Number(raw);
+    if (RATES.some((r) => r.value === v)) return v;
+  } catch {}
+  return null;
+}
+
 export function setRate(v: number) {
   try {
     localStorage.setItem(RATE_KEY, String(v));

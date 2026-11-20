@@ -11,6 +11,8 @@ export interface Profile {
   style: Style;
   daily_limit: number;
   setup_done: boolean;
+  call_level: number;
+  call_level_since: string;
 }
 
 export interface Topic {
