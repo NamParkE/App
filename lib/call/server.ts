@@ -50,3 +50,20 @@ export async function loadLesson(supabase: DB, lessonId: string): Promise<Loaded
     history: (messages ?? []) as ChatMessage[],
   };
 }
+
+/**
+ * 응답을 보낸 뒤(after) 하는 저장용. Supabase 는 실패해도 throw 하지 않으므로 error 를 직접 확인하고,
+ * 한 번 다시 시도한 뒤에도 실패하면 로그를 남긴다. 성공 여부를 돌려준다.
+ */
+export async function saveOrLog(label: string, run: () => PromiseLike<{ error: unknown }>): Promise<boolean> {
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    try {
+      const { error } = await run();
+      if (!error) return true;
+      console.error(`[call] ${label} failed (attempt ${attempt})`, error);
+    } catch (e) {
+      console.error(`[call] ${label} threw (attempt ${attempt})`, e);
+    }
+  }
+  return false;
+}

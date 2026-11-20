@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { hintAnswers } from "@/lib/call/claude";
 import { MAX_HINTS } from "@/lib/call/levels";
-import { fail, loadLesson } from "@/lib/call/server";
+import { fail, loadLesson, saveOrLog } from "@/lib/call/server";
 import type { HintResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -25,7 +25,9 @@ export async function POST(request: Request) {
   try {
     const answers = await hintAnswers({ level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle });
     after(async () => {
-      await supabase.from("lessons").update({ hints: lesson.hints + 1 }).eq("id", lesson.id);
+      await saveOrLog(`hint count (lesson ${lesson.id})`, () =>
+        supabase.from("lessons").update({ hints: lesson.hints + 1 }).eq("id", lesson.id),
+      );
     });
     const body: HintResponse = { answers, hintsLeft: MAX_HINTS - lesson.hints - 1 };
     return NextResponse.json(body);

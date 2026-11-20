@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { generatePlan } from "@/lib/call/claude";
 import { LESSON_USAGE_COST } from "@/lib/call/levels";
-import { fail } from "@/lib/call/server";
+import { fail, saveOrLog } from "@/lib/call/server";
 import type { LessonPlan, StartResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -89,7 +89,9 @@ export async function POST(request: Request) {
   const opening = { role: "tutor" as const, text: plan.plan.opening, ko: plan.plan.opening_ko, correction: null };
   // 첫 마디 저장은 기다리지 않는다 (다음 턴까지 몇 초 여유가 있다)
   after(async () => {
-    await supabase.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko });
+    await saveOrLog(`opening (lesson ${lesson.id})`, () =>
+      supabase.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
+    );
   });
 
   const body: StartResponse = {

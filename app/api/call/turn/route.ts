@@ -4,7 +4,7 @@ import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { tutorTurn } from "@/lib/call/claude";
 import { LESSON_TURNS } from "@/lib/call/levels";
-import { fail, loadLesson } from "@/lib/call/server";
+import { fail, loadLesson, saveOrLog } from "@/lib/call/server";
 import type { TurnResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -39,14 +39,19 @@ export async function POST(request: Request) {
     return fail(status, `선생님 대답을 받지 못했어요. ${message}`);
   }
 
+  // 대화를 먼저 저장하고, 성공했을 때만 턴 수를 올린다.
+  // (기록 없이 턴만 올라가면 다음 턴에서 선생님이 앞 대화를 모르게 된다)
   after(async () => {
-    await Promise.all([
+    const saved = await saveOrLog(`turn ${turnNumber} messages (lesson ${lesson.id})`, () =>
       supabase.from("lesson_messages").insert([
         { lesson_id: lesson.id, user_id: userId, role: "user", text: parsed.data.said },
         { lesson_id: lesson.id, user_id: userId, role: "tutor", text: out.reply, ko: out.ko, correction: out.correction },
       ]),
+    );
+    if (!saved) return;
+    await saveOrLog(`turn ${turnNumber} count (lesson ${lesson.id})`, () =>
       supabase.from("lessons").update({ turns: turnNumber }).eq("id", lesson.id),
-    ]);
+    );
   });
 
   const body: TurnResponse = {
