@@ -21,12 +21,15 @@ import RateControl from "@/components/RateControl";
 import Flame, { flameBadge } from "@/components/Flame";
 import Reppy, { type ReppyMood } from "@/components/Reppy";
 import { KidsCall, KidsReport } from "./KidsView";
-import { BulbIcon, CloseIcon, MicIcon, PhoneIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
+import { BulbIcon, CloseIcon, MicIcon, PhoneIcon, ReplayIcon, SendIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 
 const SCREEN_KEY = "callScreen";
 
 type Phase = "review" | "starting" | "prep" | "call" | "ending" | "report" | "error";
-type Mic = "idle" | "rec" | "waiting";
+type Mic = "idle" | "rec" | "confirm" | "waiting";
+
+/** 녹음을 멈춘 뒤 자동으로 보내기까지 기다리는 시간 (그 사이 "다시 말하기" 가능) */
+const CONFIRM_MS = 3000;
 
 interface Shown extends ChatMessage {
   id: number;
@@ -92,6 +95,8 @@ export default function CallSession({
   const [showFullReport, setShowFullReport] = useState(false);
   const kids = screen === "video";
   const listener = useRef<Listener | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
+  const confirmTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const nextId = useRef(1);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const finished = useRef(false);
@@ -108,6 +113,7 @@ export default function CallSession({
     return () => {
       listener.current?.abort();
       stopSpeaking();
+      if (confirmTimer.current) clearTimeout(confirmTimer.current);
     };
   }, []);
 
@@ -228,7 +234,15 @@ export default function CallSession({
       listener.current?.stop();
       return;
     }
+    if (mic === "confirm" && pending) {
+      sendPending(pending);
+      return;
+    }
     if (mic !== "idle") return;
+    startRecording();
+  }
+
+  function startRecording() {
     stopSpeaking();
     setSpeakingId(null);
     setCallError(null);
@@ -242,7 +256,13 @@ export default function CallSession({
           setMic("idle");
           return;
         }
-        void send(text.trim());
+        // 바로 보내지 않고 3초 동안 보여 준다. 그 사이 "다시 말하기"로 취소할 수 있다
+        const said = text.trim();
+        setPartial(said);
+        setPending(said);
+        setMic("confirm");
+        if (confirmTimer.current) clearTimeout(confirmTimer.current);
+        confirmTimer.current = setTimeout(() => sendPending(said), CONFIRM_MS);
       },
       onError: (code) => {
         listener.current = null;
@@ -256,6 +276,25 @@ export default function CallSession({
     }
     listener.current = l;
     setMic("rec");
+  }
+
+  function sendPending(said: string) {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = null;
+    setPending(null);
+    void send(said);
+  }
+
+  /** 방금 말한 것을 버리고 바로 다시 녹음 */
+  function retrySpeak() {
+    if (confirmTimer.current) clearTimeout(confirmTimer.current);
+    confirmTimer.current = null;
+    setPending(null);
+    setPartial("");
+    setMic("idle");
+    playSfx("tap");
+    // 상태가 idle 로 바뀐 다음 녹음을 시작한다
+    setTimeout(() => startRecording(), 0);
   }
 
   async function askHint() {
@@ -421,6 +460,10 @@ export default function CallSession({
         speaking={speakingId !== null}
         mic={mic}
         partial={partial}
+        pending={pending}
+        onRetry={retrySpeak}
+        onSendNow={() => pending && sendPending(pending)}
+        confirmMs={CONFIRM_MS}
         turns={turns}
         elapsed={mmss(elapsed)}
         hint={hint}
@@ -514,6 +557,25 @@ export default function CallSession({
               <div className="msg-bubble en pending" lang="en">{partial || "듣는 중…"}</div>
             </div>
           )}
+          {mic === "confirm" && pending && (
+            <div className="msg user">
+              <div className="msg-bubble pending confirm-bubble">
+                <span className="en" lang="en">{pending}</span>
+                <span className="countdown" aria-hidden="true">
+                  <i style={{ animationDuration: `${CONFIRM_MS}ms` }} />
+                </span>
+                <span className="confirm-note">곧 리피에게 보내요</span>
+              </div>
+              <div className="confirm-actions">
+                <button type="button" className="chip" onClick={retrySpeak}>
+                  <ReplayIcon size={14} /> 다시 말하기
+                </button>
+                <button type="button" className="chip send-chip" onClick={() => sendPending(pending)}>
+                  바로 보내기
+                </button>
+              </div>
+            </div>
+          )}
           {mic === "waiting" && (
             <div className="msg tutor">
               <div className="reppy-row">
@@ -574,11 +636,13 @@ export default function CallSession({
           <button
             type="button"
             className={`mic${mic === "rec" ? " rec" : ""}${mic === "waiting" ? " thinking" : ""}`}
-            aria-label={mic === "rec" ? "녹음 멈추기" : "녹음 시작"}
+            aria-label={mic === "rec" ? "녹음 멈추기" : mic === "confirm" ? "바로 보내기" : "녹음 시작"}
             onClick={onMic}
             disabled={mic === "waiting" || phase === "ending" || !listenOk}
           >
-            {mic === "rec" ? (
+            {mic === "confirm" ? (
+              <SendIcon size={32} color="#FFFFFF" />
+            ) : mic === "rec" ? (
               <span style={{ width: 28, height: 28, borderRadius: 6, background: "#fff" }} />
             ) : mic === "waiting" ? (
               <SpinnerIcon size={32} color="#FFFFFF" />
@@ -591,6 +655,8 @@ export default function CallSession({
               ? "이 브라우저는 음성 인식을 지원하지 않아요. 크롬에서 열어 주세요."
               : mic === "rec"
                 ? "다 말했으면 버튼을 눌러 멈추세요"
+                : mic === "confirm"
+                  ? "잘못 말했으면 '다시 말하기'를 누르세요"
                 : mic === "waiting"
                   ? "리피가 대답을 준비하고 있어요"
                   : "리피 말이 끝나면 버튼을 누르고 대답하세요"}

@@ -2243,3 +2243,68 @@ textarea.input {
   .kids-done-stars svg:nth-child(2) { animation-delay: 0.15s; }
   .kids-done-stars svg:nth-child(3) { animation-delay: 0.3s; }
 }
+
+/* ───── 보내기 전 확인 (3초) ───── */
+.confirm-bubble {
+  gap: 8px !important;
+}
+
+.countdown {
+  display: block;
+  height: 4px;
+  border-radius: 999px;
+  background: rgba(20, 24, 31, 0.12);
+  overflow: hidden;
+}
+
+.countdown i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  border-radius: 999px;
+  transform-origin: left center;
+  animation-name: countdown;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+
+.countdown.light {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+.countdown.light i {
+  background: #fff;
+}
+
+@keyframes countdown {
+  from { transform: scaleX(1); }
+  to { transform: scaleX(0); }
+}
+
+.confirm-note {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.confirm-actions .chip {
+  height: 40px;
+  gap: 6px;
+}
+
+.send-chip {
+  background: var(--accent) !important;
+  border-color: var(--accent) !important;
+  color: #fff !important;
+}
+
+.kids-mic.send {
+  background: var(--accent);
+  box-shadow: 0 8px 20px rgba(47, 91, 234, 0.35);
+}

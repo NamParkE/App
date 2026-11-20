@@ -4,12 +4,12 @@
 // 리피가 크게 나오고, 리피 말은 말풍선(영어 + 한글 뜻 항상)으로, 표정은 말의 감정을 따라간다.
 
 import Reppy, { type ReppyMood } from "@/components/Reppy";
-import { BulbIcon, CloseIcon, MicIcon, ReplayIcon, SpeakerIcon } from "@/components/Icons";
+import { BulbIcon, CloseIcon, MicIcon, ReplayIcon, SendIcon, SpeakerIcon } from "@/components/Icons";
 import { speak } from "@/lib/speech";
 import { LESSON_TURNS } from "@/lib/call/levels";
 import type { ChatMessage, Emotion, HintResponse, LessonReport } from "@/lib/call/types";
 
-type Mic = "idle" | "rec" | "waiting";
+type Mic = "idle" | "rec" | "confirm" | "waiting";
 
 const EMOTION_STYLE: Record<Emotion, { label: string; color: string; sky: string; mood: ReppyMood }> = {
   happy: { label: "기쁨", color: "#0F7B6C", sky: "#DDF3FF", mood: "happy" },
@@ -44,6 +44,10 @@ export function KidsCall({
   speaking,
   mic,
   partial,
+  pending,
+  onRetry,
+  onSendNow,
+  confirmMs,
   turns,
   elapsed,
   hint,
@@ -62,6 +66,10 @@ export function KidsCall({
   speaking: boolean;
   mic: Mic;
   partial: string;
+  pending: string | null;
+  onRetry: () => void;
+  onSendNow: () => void;
+  confirmMs: number;
   turns: number;
   elapsed: string;
   hint: HintResponse | null;
@@ -78,13 +86,14 @@ export function KidsCall({
 }) {
   const emo = EMOTION_STYLE[lastTutor?.emotion ?? "happy"];
   let mood: ReppyMood = emo.mood;
-  if (mic === "rec") mood = "listen";
+  if (mic === "rec" || mic === "confirm") mood = "listen";
   else if (mic === "waiting" || ending) mood = "think";
   else if (!speaking && mood === "talk") mood = "idle";
   // 감정 표정은 그대로 두고, 말하는 동안만 부리를 뻐끔거린다
   const talking = speaking && mood !== "talk";
 
-  const listening = mic === "rec";
+  const confirming = mic === "confirm" && !!pending;
+  const listening = mic === "rec" || confirming;
   const thinking = mic === "waiting" || ending;
 
   return (
@@ -160,8 +169,13 @@ export function KidsCall({
         <div className="kids-me">
           <div className="kids-me-tail" aria-hidden="true" />
           <div className="kids-me-bubble">
-            <small>내가 하는 말</small>
-            <span className="en" lang="en">{partial || "…"}</span>
+            <small>{confirming ? "이렇게 말했어요" : "내가 하는 말"}</small>
+            <span className="en" lang="en">{(confirming ? pending : partial) || "…"}</span>
+            {confirming && (
+              <span className="countdown light" aria-hidden="true">
+                <i style={{ animationDuration: `${confirmMs}ms` }} />
+              </span>
+            )}
           </div>
         </div>
       )}
@@ -169,20 +183,34 @@ export function KidsCall({
       {error && <p className="error kids-error" role="alert">{error}</p>}
 
       <div className="kids-controls">
-        <button type="button" className="kids-side" onClick={onReplay} disabled={!lastTutor || listening || thinking} aria-label="다시 듣기">
-          <ReplayIcon size={24} color="var(--accent-ink)" />
-          다시
-        </button>
-        <button
-          type="button"
-          className={`kids-mic${listening ? " rec" : ""}`}
-          onClick={onMic}
-          disabled={thinking || !listenOk}
-          aria-label={listening ? "다 말했어" : "말하기"}
-        >
-          {listening ? <span className="stop" aria-hidden="true" /> : <MicIcon size={38} color="#FFFFFF" />}
-          {listening ? "다 말했어" : "말하기"}
-        </button>
+        {confirming ? (
+          <button type="button" className="kids-side warm" onClick={onRetry} aria-label="다시 말하기">
+            <ReplayIcon size={24} color="#9A3F0B" />
+            다시 말해
+          </button>
+        ) : (
+          <button type="button" className="kids-side" onClick={onReplay} disabled={!lastTutor || listening || thinking} aria-label="다시 듣기">
+            <ReplayIcon size={24} color="var(--accent-ink)" />
+            다시
+          </button>
+        )}
+        {confirming ? (
+          <button type="button" className="kids-mic send" onClick={onSendNow} aria-label="보내기">
+            <SendIcon size={38} color="#FFFFFF" />
+            보내기
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={`kids-mic${listening ? " rec" : ""}`}
+            onClick={onMic}
+            disabled={thinking || !listenOk}
+            aria-label={listening ? "다 말했어" : "말하기"}
+          >
+            {listening ? <span className="stop" aria-hidden="true" /> : <MicIcon size={38} color="#FFFFFF" />}
+            {listening ? "다 말했어" : "말하기"}
+          </button>
+        )}
         <button type="button" className="kids-side warm" onClick={onHint} disabled={hintBusy || hintsLeft <= 0 || listening || thinking} aria-label="도와줘">
           <BulbIcon size={24} color="#9A3F0B" />
           도와줘
