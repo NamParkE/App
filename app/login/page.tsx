@@ -15,6 +15,20 @@ function loginErrorMessage(code: string) {
   return "로그인하지 못했어요. 새 링크를 받아 다시 시도해 주세요.";
 }
 
+function sendErrorMessage(error: { status?: number; code?: string; message: string }) {
+  const code = error.code ?? "";
+  if (error.status === 429 || /rate_limit/.test(code)) {
+    const seconds = error.message.match(/after (\d+) seconds?/)?.[1];
+    return seconds
+      ? `메일을 너무 자주 요청했어요. ${seconds}초 뒤에 다시 시도해 주세요. 그 사이 이미 온 메일이 있는지 먼저 확인해 보세요.`
+      : "메일을 너무 자주 요청했어요. 무료 메일은 시간당 보낼 수 있는 수가 정해져 있어요. 이미 온 메일이 있는지 확인하고, 없으면 1시간쯤 뒤에 다시 시도해 주세요.";
+  }
+  if (/email_address_invalid|validation_failed|email_address_not_authorized/.test(code)) {
+    return "이 이메일 주소로는 보낼 수 없어요. 주소를 확인해 주세요.";
+  }
+  return "메일을 보내지 못했어요. 잠시 후 다시 시도해 주세요.";
+}
+
 export default function LoginPage() {
   const [mode, setMode] = useState<"main" | "email" | "code">("main");
   const [email, setEmail] = useState("");
@@ -58,7 +72,7 @@ export default function LoginPage() {
       options: { emailRedirectTo: redirectTo() },
     });
     setBusy(false);
-    if (error) setError("메일을 보내지 못했어요. 주소를 확인해 주세요.");
+    if (error) setError(sendErrorMessage(error));
     else setSent(true);
   }
 
