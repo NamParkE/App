@@ -7,6 +7,7 @@ import type { ActiveLessonRow } from "@/lib/call/rules";
 import type { Profile } from "@/lib/types";
 import TopicPicker from "./TopicPicker";
 import { ModeTabs } from "./ModeSwitch";
+import HomeReppy from "./HomeReppy";
 import ResumeCard from "./ResumeCard";
 
 export interface CallTopic {
@@ -83,6 +84,8 @@ export default function CallHome({
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
+
+        <HomeReppy streak={streak.streak} studiedToday={streak.studiedToday} mode="vocab" />
 
         <section className="card" aria-label="내 레벨">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

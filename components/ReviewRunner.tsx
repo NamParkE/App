@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import { useEffect, useRef, useState } from "react";
 import { CheckIcon, MicIcon, SpeakerIcon, SpinnerIcon } from "./Icons";
 import { canListen, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
@@ -52,6 +53,7 @@ export default function ReviewRunner({
       return;
     }
     const data = (await res.json()) as { diff: { score: number }; passed: boolean };
+    playSfx(data.passed ? "good" : "retry");
     setResult({ score: data.diff.score, passed: data.passed });
     if (data.passed) setPassedCount((n) => n + 1);
     setPhase("result");

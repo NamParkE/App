@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Style } from "@/lib/types";
@@ -27,6 +28,7 @@ export default function HomeModeSwitch({
   function pick(next: Style) {
     if (next === style) return;
     const prev = style;
+    playSfx("tap");
     setStyle(next);
     setError(false);
     void createClient()

@@ -1430,13 +1430,21 @@ textarea.input {
 }
 
 .celebrate-flame {
-  width: 180px;
-  height: 180px;
+  position: relative;
+  width: 190px;
+  height: 190px;
   border-radius: 999px;
   background: #2a2016;
   display: flex;
-  align-items: center;
+  align-items: flex-end;
   justify-content: center;
+  padding-bottom: 6px;
+}
+
+.celebrate-mini-flame {
+  position: absolute;
+  top: 2px;
+  right: 0;
 }
 
 .celebrate-badge {
@@ -1748,4 +1756,572 @@ textarea.input {
 
 .resume-card {
   border: 2px solid var(--accent);
+}
+
+/* ───── 마스코트 리피 ───── */
+.reppy-says {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.reppy-bubble {
+  position: relative;
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 16px 16px 16px 4px;
+  padding: 10px 14px;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.reppy-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  overflow: hidden;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.reppy-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.reppy-body,
+.reppy-head,
+.reppy-eye,
+.reppy-jaw,
+.reppy-wing-r,
+.reppy-crest,
+.reppy-spark,
+.reppy-shadow {
+  transform-box: fill-box;
+}
+
+.reppy-body { transform-origin: 50% 100%; }
+.reppy-head { transform-origin: 50% 92%; }
+.reppy-eye { transform-origin: center; }
+.reppy-jaw { transform-origin: 50% 0%; }
+.reppy-wing-r { transform-origin: 22% 92%; }
+.reppy-crest { transform-origin: 50% 100%; }
+.reppy-spark,
+.reppy-shadow { transform-origin: center; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .reppy .reppy-body { animation: reppy-breathe 2.8s ease-in-out infinite; }
+  .reppy-happy .reppy-body { animation: reppy-hop 0.95s cubic-bezier(0.3, 0.7, 0.4, 1) infinite; }
+  .reppy-sleepy .reppy-body { animation: reppy-breathe 4.2s ease-in-out infinite; }
+  .reppy-talk .reppy-head { animation: reppy-nod 0.55s ease-in-out infinite; }
+  .reppy-think .reppy-head { animation: reppy-tilt 2.6s ease-in-out infinite; }
+  .reppy-sleepy .reppy-head { animation: reppy-doze 4.2s ease-in-out infinite; }
+  .reppy-surprised .reppy-body { animation: reppy-pop 1.6s cubic-bezier(0.3, 0.7, 0.4, 1) infinite; }
+  .reppy-surprised .reppy-crest { animation: reppy-crest-up 1.6s ease-out infinite; }
+  .reppy-curious .reppy-head { animation: reppy-curious 2.2s ease-in-out infinite; }
+  .reppy-listen .reppy-head { animation: reppy-listen 2.4s ease-in-out infinite; }
+  .reppy-comfort .reppy-head { transform: rotate(-7deg); }
+  .reppy-comfort .reppy-body { animation: reppy-breathe 3.6s ease-in-out infinite; }
+  .reppy-proud .reppy-wing-r { animation: reppy-wave 0.9s ease-in-out infinite alternate; }
+  .reppy-talking .reppy-jaw { animation: reppy-chatter 0.2s ease-in-out infinite alternate; }
+  .reppy-float { animation: reppy-float 1.8s ease-in-out infinite; }
+  .reppy-ring { animation: reppy-ring 1.2s ease-out infinite; }
+  .reppy-ring:nth-of-type(2) { animation-delay: 0.3s; }
+  .reppy-eye { animation: reppy-blink 4.4s infinite; }
+  .reppy-talk .reppy-jaw { animation: reppy-chatter 0.2s ease-in-out infinite alternate; }
+  .reppy-wave .reppy-wing-r { animation: reppy-wave 0.45s ease-in-out infinite alternate; }
+  .reppy-crest { animation: reppy-sway 2.8s ease-in-out infinite; }
+  .reppy-dot { animation: reppy-dot 1.2s ease-in-out infinite; }
+  .reppy-dot:nth-of-type(2) { animation-delay: 0.2s; }
+  .reppy-dot:nth-of-type(3) { animation-delay: 0.4s; }
+  .reppy-z { animation: reppy-z 2.6s ease-in infinite; }
+  .reppy-z2 { animation-delay: 1.3s; }
+  .reppy-spark { animation: reppy-twinkle 1.1s ease-in-out infinite; }
+  .reppy-spark:nth-of-type(2) { animation-delay: 0.35s; }
+  .reppy-spark:nth-of-type(3) { animation-delay: 0.7s; }
+  .reppy .reppy-shadow { animation: reppy-shadow 2.8s ease-in-out infinite; }
+  .reppy-happy .reppy-shadow { animation: reppy-shadow-hop 0.95s cubic-bezier(0.3, 0.7, 0.4, 1) infinite; }
+}
+
+@keyframes reppy-breathe { 0%, 100% { transform: translateY(0) scale(1, 1); } 50% { transform: translateY(-1.5px) scale(1.012, 0.988); } }
+@keyframes reppy-hop { 0%, 100% { transform: translateY(0) scale(1.05, 0.95); } 30% { transform: translateY(-11px) scale(0.96, 1.05); } 55% { transform: translateY(0) scale(1.06, 0.94); } 70% { transform: translateY(0) scale(0.99, 1.01); } }
+@keyframes reppy-nod { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-3deg) translateY(-1px); } }
+@keyframes reppy-tilt { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(9deg); } }
+@keyframes reppy-doze { 0%, 100% { transform: rotate(0) translateY(0); } 50% { transform: rotate(-5deg) translateY(2px); } }
+@keyframes reppy-blink { 0%, 93%, 100% { transform: scaleY(1); } 96% { transform: scaleY(0.08); } }
+@keyframes reppy-chatter { from { transform: scaleY(0.35); } to { transform: scaleY(1.1); } }
+@keyframes reppy-wave { from { transform: rotate(-16deg); } to { transform: rotate(14deg); } }
+@keyframes reppy-sway { 0%, 100% { transform: rotate(0); } 50% { transform: rotate(-5deg); } }
+@keyframes reppy-dot { 0%, 100% { opacity: 0.3; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-2px); } }
+@keyframes reppy-z { 0% { opacity: 0; transform: translate(0, 0) scale(0.6); } 30% { opacity: 1; } 100% { opacity: 0; transform: translate(9px, -18px) scale(1.25); } }
+@keyframes reppy-twinkle { 0%, 100% { opacity: 0; transform: scale(0.3) rotate(0); } 50% { opacity: 1; transform: scale(1) rotate(45deg); } }
+@keyframes reppy-shadow { 0%, 100% { transform: scaleX(1); } 50% { transform: scaleX(0.95); } }
+@keyframes reppy-pop { 0% { transform: translateY(0) scale(1); } 12% { transform: translateY(-8px) scale(0.94, 1.08); } 26% { transform: translateY(0) scale(1.06, 0.95); } 36%, 100% { transform: translateY(0) scale(1); } }
+@keyframes reppy-crest-up { 0% { transform: scaleY(1); } 12% { transform: scaleY(1.25); } 40%, 100% { transform: scaleY(1); } }
+@keyframes reppy-curious { 0%, 100% { transform: rotate(10deg); } 50% { transform: rotate(14deg) translateY(-1px); } }
+@keyframes reppy-listen { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(-11deg) translateY(1px); } }
+@keyframes reppy-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-4px); } }
+@keyframes reppy-ring { 0% { opacity: 0; } 30% { opacity: 1; } 100% { opacity: 0; } }
+@keyframes reppy-shadow-hop { 0%, 100% { transform: scaleX(1); opacity: 0.16; } 30% { transform: scaleX(0.68); opacity: 0.07; } 55% { transform: scaleX(1.06); opacity: 0.16; } }
+
+.reppy-pet {
+  border: none;
+  background: transparent;
+  padding: 0;
+  border-radius: 999px;
+  display: flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* 내 정보: 효과음 설정 */
+.setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 44px;
+  font-size: 15px;
+}
+
+.switch {
+  position: relative;
+  width: 52px;
+  height: 32px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  margin: 0;
+  cursor: pointer;
+}
+
+.switch span {
+  position: absolute;
+  inset: 0;
+  border-radius: 999px;
+  background: var(--chip-line);
+  transition: background-color 0.2s ease;
+  pointer-events: none;
+}
+
+.switch span::after {
+  content: "";
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(20, 24, 31, 0.25);
+  transition: transform 0.2s ease;
+}
+
+.switch input:checked + span {
+  background: var(--accent);
+}
+
+.switch input:checked + span::after {
+  transform: translateX(20px);
+}
+
+.switch input:focus-visible + span {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ───── 어린이 모드 (영상통화) ───── */
+.kids-screen {
+  position: relative;
+  overflow: hidden;
+  max-width: 480px;
+  margin: 0 auto;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  transition: background-color 0.4s ease;
+  color: var(--ink);
+}
+
+.kids-hill {
+  position: absolute;
+  left: -15%;
+  right: -15%;
+  bottom: 150px;
+  height: 260px;
+  border-radius: 50%;
+  background: #fff;
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.kids-top {
+  position: relative;
+  padding: 16px 16px 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kids-live,
+.kids-listening {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 999px;
+  padding: 6px 12px 6px 10px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.kids-live .dot,
+.kids-listening .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  background: #22a06b;
+}
+
+.kids-end {
+  width: 48px;
+  height: 48px;
+  border-radius: 999px;
+  border: none;
+  background: #e5484d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kids-stars {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  padding-top: 12px;
+}
+
+.kids-say {
+  position: relative;
+  padding: 14px 20px 0;
+}
+
+.kids-bubble {
+  background: #fff;
+  border-radius: 26px;
+  padding: 16px 18px;
+  box-shadow: 0 8px 24px rgba(30, 50, 120, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 60px;
+  justify-content: center;
+}
+
+.kids-tail {
+  margin-left: 50%;
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-top: 16px solid #fff;
+}
+
+.kids-emo {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.kids-emo span {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+}
+
+.kids-line {
+  font-size: 23px;
+  line-height: 1.3;
+  font-weight: 800;
+  letter-spacing: -0.3px;
+}
+
+.kids-ko {
+  font-size: 15px;
+  color: var(--muted);
+}
+
+.kids-listening {
+  position: relative;
+  align-self: center;
+  margin-top: 28px;
+  color: #0f7b6c;
+}
+
+.kids-listening .dot {
+  background: #0f7b6c;
+}
+
+.kids-reppy {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.kids-hints {
+  position: relative;
+  margin: 0 20px 8px;
+  background: #fff;
+  border-radius: 22px;
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  box-shadow: 0 6px 18px rgba(30, 50, 120, 0.12);
+}
+
+.kids-hints-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--warn-ink);
+}
+
+.kids-hint {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  border: none;
+  border-radius: 14px;
+  background: var(--accent-soft);
+  padding: 8px 12px;
+  text-align: left;
+  color: var(--ink);
+}
+
+.kids-hint span,
+.kids-word span {
+  display: flex;
+  flex-direction: column;
+}
+
+.kids-hint b {
+  font-size: 17px;
+}
+
+.kids-hint small,
+.kids-word small {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.kids-me {
+  position: relative;
+  padding: 0 20px 8px;
+}
+
+.kids-me-tail {
+  margin-left: auto;
+  margin-right: 40px;
+  width: 0;
+  height: 0;
+  border-left: 14px solid transparent;
+  border-right: 14px solid transparent;
+  border-bottom: 16px solid #ff8a3d;
+}
+
+.kids-me-bubble {
+  background: #ff8a3d;
+  color: #fff;
+  border-radius: 26px;
+  padding: 14px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.kids-me-bubble small {
+  font-size: 13px;
+  font-weight: 700;
+  opacity: 0.9;
+}
+
+.kids-me-bubble span {
+  font-size: 21px;
+  line-height: 1.3;
+  font-weight: 800;
+}
+
+.kids-error {
+  position: relative;
+  margin: 0 20px 8px;
+}
+
+.kids-controls {
+  position: relative;
+  padding: 8px 20px max(26px, env(safe-area-inset-bottom, 0px));
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kids-side {
+  width: 66px;
+  height: 66px;
+  border-radius: 999px;
+  border: none;
+  background: #fff;
+  box-shadow: 0 4px 12px rgba(30, 50, 120, 0.12);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+
+.kids-side.warm {
+  color: var(--warn-ink);
+}
+
+.kids-side:disabled {
+  opacity: 0.45;
+}
+
+.kids-mic {
+  width: 108px;
+  height: 108px;
+  border-radius: 999px;
+  border: 6px solid #fff;
+  background: #ff8a3d;
+  box-shadow: 0 8px 20px rgba(255, 120, 40, 0.35);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.kids-mic.rec {
+  background: #e5484d;
+  box-shadow: 0 0 0 10px rgba(229, 72, 77, 0.18);
+}
+
+.kids-mic .stop {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.kids-mic:disabled {
+  opacity: 0.6;
+}
+
+/* 아이용 통화 끝 화면 */
+.kids-done {
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 100dvh;
+  background: #fff6d6;
+  padding: 28px 20px 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  color: var(--ink);
+}
+
+.kids-done-title {
+  margin: 0;
+  font-size: 28px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
+  text-align: center;
+}
+
+.kids-done-stars {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.kids-words {
+  width: 100%;
+  background: #fff;
+  border-radius: 24px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  box-shadow: 0 6px 18px rgba(180, 120, 0, 0.12);
+}
+
+.kids-words h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 900;
+}
+
+.kids-word {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.kids-word b {
+  font-size: 20px;
+}
+
+.kids-big-btn {
+  width: 100%;
+  height: 60px;
+  border-radius: 20px;
+  border: none;
+  background: #ff8a3d;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .kids-bubble {
+    animation: pop 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    transform-origin: 50% 100%;
+  }
+  .kids-me-bubble,
+  .kids-hints {
+    animation: rise 0.3s ease both;
+  }
+  .kids-mic.rec {
+    animation: pulse 1.4s ease-in-out infinite;
+  }
+  .kids-done-stars svg {
+    animation: pop 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  }
+  .kids-done-stars svg:nth-child(2) { animation-delay: 0.15s; }
+  .kids-done-stars svg:nth-child(3) { animation-delay: 0.3s; }
 }

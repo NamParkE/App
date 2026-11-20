@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useState } from "react";
 import { CATEGORIES, type Category } from "@/lib/types";
@@ -21,6 +22,7 @@ export default function TopicBrowser({ items, initialCat }: { items: TopicItem[]
   const [cat, setCat] = useState<Category>(initialCat);
 
   function pick(next: Category) {
+    if (next !== cat) playSfx("tap");
     setCat(next);
     const url = next === "survey" ? "/home" : `/home?cat=${next}`;
     window.history.replaceState(window.history.state, "", url);

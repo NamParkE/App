@@ -7,6 +7,7 @@ import { checkProfile, fetchProfile, myStreak, requireUser, todayKst, usageToday
 import { StreakChip } from "@/components/Flame";
 import CallHome, { type CallTopic, type LessonRow } from "./CallHome";
 import HomeModeSwitch, { ModeTabs } from "./ModeSwitch";
+import HomeReppy from "./HomeReppy";
 import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
 import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
 import { closeStale, splitActive, type ActiveLessonRow } from "@/lib/call/server";
@@ -103,6 +104,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
+
+        <HomeReppy streak={streak.streak} studiedToday={streak.studiedToday} mode="memorize" />
 
         <section className="usage" aria-label="오늘 남은 연습">
           <div className="row">

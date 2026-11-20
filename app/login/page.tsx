@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { GlobeIcon, MicIcon, SpinnerIcon } from "@/components/Icons";
+import { GlobeIcon, SpinnerIcon } from "@/components/Icons";
+import Reppy from "@/components/Reppy";
 import { INVITE_KEY } from "@/lib/invite";
 
 type Mode = "login" | "signup" | "reset" | "code";
@@ -193,8 +194,11 @@ export default function LoginPage() {
   return (
     <main className="screen" style={{ padding: "56px 24px 40px" }}>
       <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-        <div className="logo">
-          <MicIcon size={28} color="#FFFFFF" />
+        <div className="reppy-row">
+          <Reppy mood="wave" size={110} decorative />
+          <div className="reppy-bubble en" style={{ flex: "none", marginBottom: 56, fontWeight: 600, fontSize: 15 }}>
+            Hi! I&apos;m Reppy.
+          </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <h1 className="hero">
@@ -203,7 +207,7 @@ export default function LoginPage() {
             오픽 핵심 답변
           </h1>
           <p className="subtitle" style={{ fontSize: 16, lineHeight: 1.6 }}>
-            내 목표 등급에 맞춘 문장을 듣고, 따라 말하고, 비교 피드백으로 완성하세요.
+            리피와 함께 듣고, 따라 말하고, 비교 피드백으로 완성하세요.
           </p>
         </div>
       </div>

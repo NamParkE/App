@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import { useEffect, useState } from "react";
 import { getRate, RATES, setRate } from "@/lib/speech";
 
@@ -24,6 +25,7 @@ export default function RateControl() {
           onClick={() => {
             setRate(r.value);
             setLocal(r.value);
+            playSfx("tap");
           }}
         >
           {r.label}

@@ -20,6 +20,10 @@ export interface Correction {
   note: string;
 }
 
+/** 리피가 말할 때의 감정 (어린이 모드에서 표정으로 보여 준다) */
+export const EMOTIONS = ["happy", "surprised", "curious", "proud", "comfort", "neutral"] as const;
+export type Emotion = (typeof EMOTIONS)[number];
+
 export interface ChatMessage {
   role: "tutor" | "user";
   text: string;
@@ -27,6 +31,7 @@ export interface ChatMessage {
   correction?: Correction | null;
   /** false 면 엉뚱한 대답이라 대답 수에 넣지 않았다 (학생 말에만) */
   counted?: boolean;
+  emotion?: Emotion;
 }
 
 export interface StartResponse {

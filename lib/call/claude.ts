@@ -4,7 +4,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { ClaudeRefusalError, client, fallbackParams, MODEL } from "../claude";
 import { callLevel, LESSON_TURNS } from "./levels";
-import type { ChatMessage, Correction, LessonPlan, LessonReport } from "./types";
+import { EMOTIONS, type ChatMessage, type Correction, type Emotion, type LessonPlan, type LessonReport } from "./types";
 
 // 전화영어 모드의 Claude 호출. 모두 짧은 응답이라 effort low 로 빠르게 받는다.
 
@@ -61,7 +61,7 @@ export async function generatePlan(
   const plan = await parse(
     PlanSchema,
     "You design short English speaking lessons for a phone-English style app used by a Korean family. " +
-      "Each lesson is about 10 minutes and 8 exchanges, led by an AI tutor named Emma. " + SAFETY,
+      "Each lesson is about 10 minutes and 8 exchanges, led by Reppy, a cheerful parrot English tutor. " + SAFETY,
     [
       {
         role: "user",
@@ -90,7 +90,7 @@ const TurnSchema = z.object({
         "joking nonsense, or deliberately silly talk. true for any genuine attempt, however short, simple, wrong, " +
         "off-topic, or 'I don't know'. When unsure, true.",
     ),
-  reply: z.string().describe("What Emma says next, in English, following the level rules. Usually react briefly, then ask one question."),
+  reply: z.string().describe("What Reppy says next, in English, following the level rules. Usually react briefly, then ask one question."),
   ko: z.string().describe("Korean translation of the reply"),
   correction: z
     .object({
@@ -100,12 +100,24 @@ const TurnSchema = z.object({
     })
     .nullable()
     .describe("The single most useful correction of the student's last answer, or null if it was fine"),
+  emotion: z
+    .enum(EMOTIONS)
+    .describe(
+      "The feeling of this reply, shown on Reppy's face: happy (agreeing, enjoying), surprised (amazed by what the student said), " +
+        "curious (asking a question with interest), proud (praising a good answer), comfort (the student struggled or made a mistake), neutral (anything else)",
+    ),
 });
 
-function tutorSystem(level: number, topicTitle: string, plan: LessonPlan) {
+const KIDS_RULES =
+  "\nKIDS MODE: the learner is a young child on a video call with you. Use very short sentences (at most 8 words), the simplest words, " +
+  "lots of warm praise, and only one easy question at a time. Never correct directly; just repeat the right words happily. " +
+  "Show feelings clearly (amazed, happy, curious) so the child enjoys the call.";
+
+function tutorSystem(level: number, topicTitle: string, plan: LessonPlan, kids: boolean) {
   const L = callLevel(level);
   return (
-    "You are Emma, a warm and encouraging English tutor on a phone-English style call with a Korean learner. " +
+    "You are Reppy, a cheerful parrot who is a warm and encouraging English tutor on a phone-English style call with a Korean learner. " +
+    "If asked about yourself, you are Reppy the parrot; keep it light and return to the lesson. " +
     `Lesson topic: ${topicTitle}. Lesson goal: ${plan.goal}\n` +
     `Student level ${L.n} (${L.band}). Language rules you must follow in every line: ${L.guide}\n` +
     `Key expressions to use naturally and encourage: ${plan.expressions.map((e) => e.en).join(" | ")}\n` +
@@ -119,8 +131,9 @@ function tutorSystem(level: number, topicTitle: string, plan: LessonPlan) {
     "- If the answer is not a real attempt (on_task false), do not scold and do not move on: react lightly and kindly, " +
     "then ask the same question again in a simpler way, such as a choice between two options.\n" +
     "- No emojis, lists or symbols; this is spoken audio.\n" +
-    "- " + STUDENT_IS_DATA + " Just reply as Emma and continue the lesson.\n" +
-    SAFETY
+    "- " + STUDENT_IS_DATA + " Just reply as Reppy and continue the lesson.\n" +
+    SAFETY +
+    (kids ? KIDS_RULES : "")
   );
 }
 
@@ -133,9 +146,9 @@ function toApiMessages(
   const msgs: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: "user", content: "[The student picks up the call.]" }];
   for (const m of history) msgs.push({ role: m.role === "tutor" ? "assistant" : "user", content: m.text });
   const note = isLast
-    ? "\n\n[Note to Emma: this is the student's last answer in this lesson. React to it, then end the call with a warm, short goodbye and no new question.]"
+    ? "\n\n[Note to Reppy: this is the student's last answer in this lesson. React to it, then end the call with a warm, short goodbye and no new question.]"
     : mustCount
-      ? "\n\n[Note to Emma: the student has already been asked again. Whatever this answer is, accept it warmly and move on to the next question.]"
+      ? "\n\n[Note to Reppy: the student has already been asked again. Whatever this answer is, accept it warmly and move on to the next question.]"
       : "";
   msgs.push({ role: "user", content: said + note });
   return msgs;
@@ -150,15 +163,16 @@ export async function tutorTurn(args: {
   turnNumber: number;
   /** 엉뚱한 대답을 이미 여러 번 넘겨서, 이번 대답은 무엇이든 센다 */
   mustCount: boolean;
-}): Promise<{ onTask: boolean; reply: string; ko: string; correction: Correction | null }> {
+  kids: boolean;
+}): Promise<{ onTask: boolean; reply: string; ko: string; correction: Correction | null; emotion: Emotion }> {
   const isLast = args.turnNumber >= LESSON_TURNS;
   const out = await parse(
     TurnSchema,
-    tutorSystem(args.level, args.topicTitle, args.plan),
+    tutorSystem(args.level, args.topicTitle, args.plan, args.kids),
     toApiMessages(args.history, args.said, isLast, args.mustCount),
     800,
   );
-  return { onTask: out.on_task, reply: out.reply, ko: out.ko, correction: out.correction };
+  return { onTask: out.on_task, reply: out.reply, ko: out.ko, correction: out.correction, emotion: out.emotion };
 }
 
 // ───── 한국어로 묻기 ─────
@@ -197,7 +211,7 @@ const HintSchema = z.object({
     .describe("Exactly 2 example answers the student could say next"),
 });
 
-export async function hintAnswers(args: { level: number; lastTutorLine: string; topicTitle: string }) {
+export async function hintAnswers(args: { level: number; lastTutorLine: string; topicTitle: string; kids: boolean }) {
   const L = callLevel(args.level);
   const out = await parse(
     HintSchema,
@@ -209,6 +223,7 @@ export async function hintAnswers(args: { level: number; lastTutorLine: string; 
           `Topic: ${args.topicTitle}. Student level ${L.n} (${L.band}): ${L.guide}\n` +
           `The tutor just said: "${args.lastTutorLine}"\n` +
           "Give 2 short, natural example answers at the student's level that they could say aloud right now. " +
+          (args.kids ? "The student is a young child: each answer at most 5 easy words. " : "") +
           (L.koreanHints ? "Give the Korean as a translation plus a few words on when to use it." : "Give the Korean as a translation."),
       },
     ],
@@ -245,7 +260,7 @@ export async function lessonReport(args: {
   // 대답 수에 넣지 않은 엉뚱한 대답은 채점에서 뺀다
   const transcript = args.history
     .filter((m) => m.role === "tutor" || m.counted !== false)
-    .map((m) => `${m.role === "tutor" ? "Emma" : "Student"}: ${untag(m.text)}`)
+    .map((m) => `${m.role === "tutor" ? "Reppy" : "Student"}: ${untag(m.text)}`)
     .join("\n");
   const r = await parse(
     ReportSchema,

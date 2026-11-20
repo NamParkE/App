@@ -1,9 +1,11 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import ReviewRunner from "@/components/ReviewRunner";
+import { ReppySays } from "@/components/Reppy";
 import { BackIcon, SpeakerIcon } from "@/components/Icons";
 import { speak } from "@/lib/speech";
 
@@ -88,14 +90,14 @@ export default function Phrasebook({ rows, today }: { rows: PhraseRow[]; today: 
               ["learned", "익힌 것"],
             ] as const
           ).map(([id, label]) => (
-            <button key={id} type="button" className="chip" aria-pressed={filter === id} aria-current={filter === id ? "true" : undefined} onClick={() => setFilter(id)}>
+            <button key={id} type="button" className="chip" aria-pressed={filter === id} aria-current={filter === id ? "true" : undefined} onClick={() => { setFilter(id); playSfx("tap"); }}>
               {label}
             </button>
           ))}
         </div>
 
         {rows.length === 0 ? (
-          <p className="muted" style={{ fontSize: 14 }}>전화영어 수업을 마치면 그날 배운 표현이 여기에 모여요.</p>
+          <ReppySays mood="idle">전화영어 수업을 마치면 그날 배운 표현이 여기에 모여요.</ReppySays>
         ) : (
           <div className="list" key={filter}>
             {shown.map((r) => (

@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Reppy from "@/components/Reppy";
 import { LESSON_TURNS, LESSON_USAGE_COST } from "@/lib/call/levels";
 
 /** 끊긴 통화 이어하기 카드. 그만두면 리포트 없이 닫고, 대답이 0번이면 연습 횟수를 돌려준다. */
@@ -48,7 +49,9 @@ export default function ResumeCard({
   return (
     <section className="card resume-card" aria-label="끊긴 통화">
       <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-        <div className="avatar en" aria-hidden="true">Em</div>
+        <div className="reppy-avatar">
+          <Reppy mood="curious" size={48} decorative />
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 2, flexGrow: 1, minWidth: 0 }}>
           <div style={{ fontSize: 16, fontWeight: 700 }}>통화가 끊겼어요</div>
           <div className="muted" style={{ fontSize: 13 }}>
@@ -57,7 +60,7 @@ export default function ResumeCard({
         </div>
       </div>
       <div className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
-        Emma가 기다리고 있어요. 하던 데서 이어서 해요. 연습 횟수는 더 쓰지 않아요.
+        리피가 기다리고 있어요. 하던 데서 이어서 해요. 연습 횟수는 더 쓰지 않아요.
       </div>
       <div className="btn-row" style={{ gap: 10 }}>
         <Link href={`/call?resume=${lessonId}`} className="btn btn-primary" style={{ flex: 2, height: 52 }}>

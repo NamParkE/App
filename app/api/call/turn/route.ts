@@ -11,7 +11,12 @@ import type { TurnResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
 
-const Body = z.object({ lessonId: z.string().uuid(), said: z.string().trim().min(1).max(600) });
+const Body = z.object({
+  lessonId: z.string().uuid(),
+  said: z.string().trim().min(1).max(600),
+  /** 어린이 모드(영상통화 화면): 더 짧고 쉬운 말로 */
+  kids: z.boolean().default(false),
+});
 
 /** 통화 한 턴: 기록을 읽고(동시에 2쿼리) → 선생님 대답(AI 1회) → 응답을 먼저 보내고 저장은 뒤에서 */
 export async function POST(request: Request) {
@@ -40,6 +45,7 @@ export async function POST(request: Request) {
       said: parsed.data.said,
       turnNumber,
       mustCount,
+      kids: parsed.data.kids,
     });
   } catch (e) {
     console.error("turn failed", e);
@@ -65,7 +71,7 @@ export async function POST(request: Request) {
   });
 
   const body: TurnResponse = {
-    reply: { role: "tutor", text: out.reply, ko: out.ko, correction: out.correction },
+    reply: { role: "tutor", text: out.reply, ko: out.ko, correction: out.correction, emotion: out.emotion },
     turns,
     done: counted && isLast,
     counted,

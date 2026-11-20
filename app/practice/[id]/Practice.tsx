@@ -1,5 +1,6 @@
 "use client";
 
+import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, CloseIcon, MicIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
@@ -89,6 +90,7 @@ export default function Practice({
   }, [idx, loaded]);
 
   function changeMode(m: Mode) {
+    if (m !== mode) playSfx("tap");
     setMode(m);
     try {
       localStorage.setItem(MODE_KEY, m);
@@ -111,12 +113,14 @@ export default function Practice({
         return;
       }
       const data = (await res.json()) as FeedbackResponse;
+      const newlyMemorized = data.status === "memorized" && statuses[sentence.id] !== "memorized";
+      playSfx(newlyMemorized ? "memorized" : data.diff.score >= 90 ? "good" : "retry");
       setResult(data);
       if (data.usageLeft !== null) setUsageLeft(data.usageLeft);
       setStatuses((s) => ({ ...s, [sentence.id]: data.status }));
       setPhase("result");
     },
-    [sentence.id, mode],
+    [sentence.id, mode, statuses],
   );
 
   function startRec() {
