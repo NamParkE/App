@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.pnjopic.app",
+      "sha256_cert_fingerprints": ["76:38:6D:5D:6D:51:52:7C:BD:CD:74:6D:36:8C:50:2C:9F:92:56:7A:9C:16:67:43:91:94:AB:06:27:47:21:E3"]
+    }
+  }
+]

@@ -69,6 +69,14 @@ Supabase SQL Editor에서 실행합니다.
 update public.profiles set daily_limit = 50 where display_name = '민지';
 ```
 
+## 안드로이드 앱 (APK)
+
+`android/`는 웹앱을 감싸는 안드로이드 앱(Trusted Web Activity)입니다. 화면과 기능은 웹에서 오므로, APK는 아이콘·이름·주소가 바뀔 때만 다시 만들면 됩니다.
+
+- **빌드:** GitHub Actions의 **Android APK** 워크플로가 `android/`가 바뀌어 `main`에 푸시될 때 자동으로 실행됩니다. Actions 탭에서 **Run workflow**로 직접 실행할 수도 있습니다. 결과 APK는 저장소의 **Releases**에 올라갑니다.
+- **서명:** 키는 `android/release.keystore`(비밀번호로 잠김)에 있고, 비밀번호는 저장소 Secret `ANDROID_KEYSTORE_PASSWORD`에만 있습니다. 비밀번호를 잃어버리면 같은 앱으로 업데이트할 수 없으니 따로 보관하세요.
+- **주소창 숨기기:** `public/.well-known/assetlinks.json`의 지문이 서명 키와 같아야 앱 위쪽에 주소창이 나오지 않습니다.
+
 ## 학습 규칙
 
 - 연습은 **보면서 말하기**와 **가리고 말하기**(한글 뜻만 보고 영어로 말하기) 두 가지입니다.

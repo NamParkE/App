@@ -1,0 +1,58 @@
+# 안드로이드 APK 빌드. 결과는 저장소의 Releases 페이지에 올라간다.
+# 필요한 것: 저장소 Secret ANDROID_KEYSTORE_PASSWORD (android/release.keystore 의 비밀번호)
+name: Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "android/**"
+      - ".github/workflows/android-apk.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-apk
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check signing password
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$KEYSTORE_PASSWORD" ]; then
+            echo "::error::저장소 Settings > Secrets and variables > Actions 에 ANDROID_KEYSTORE_PASSWORD 를 추가해 주세요."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Build signed APK
+        working-directory: android
+        env:
+          KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: gradle assembleRelease -PversionCode=${{ github.run_number }} --no-daemon --stacktrace
+
+      - name: Publish to Releases
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/release/app-release.apk opic-app.apk
+          gh release create "android-${{ github.run_number }}" opic-app.apk \
+            --title "오픽 암기 안드로이드 앱 (빌드 ${{ github.run_number }})" \
+            --notes "휴대폰에서 opic-app.apk 를 받아 설치하세요. 앱 화면과 기능은 웹에서 자동으로 업데이트되므로, 이 파일은 아이콘이나 이름이 바뀔 때만 새로 받으면 됩니다."
