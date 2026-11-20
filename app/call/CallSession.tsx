@@ -20,7 +20,10 @@ import ReviewRunner from "@/components/ReviewRunner";
 import RateControl from "@/components/RateControl";
 import Flame, { flameBadge } from "@/components/Flame";
 import Reppy, { type ReppyMood } from "@/components/Reppy";
+import { KidsCall, KidsReport } from "./KidsView";
 import { BulbIcon, CloseIcon, MicIcon, PhoneIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
+
+const SCREEN_KEY = "callScreen";
 
 type Phase = "review" | "starting" | "prep" | "call" | "ending" | "report" | "error";
 type Mic = "idle" | "rec" | "waiting";
@@ -85,14 +88,22 @@ export default function CallSession({
   const [showTranscript, setShowTranscript] = useState(false);
   const [levelNote, setLevelNote] = useState<string | null>(null);
   const [listenOk, setListenOk] = useState(true);
+  const [screen, setScreen] = useState<"chat" | "video">(level <= 2 ? "video" : "chat");
+  const [showFullReport, setShowFullReport] = useState(false);
+  const kids = screen === "video";
   const listener = useRef<Listener | null>(null);
   const nextId = useRef(1);
   const bottomRef = useRef<HTMLDivElement | null>(null);
   const finished = useRef(false);
 
-  const rate = useCallback(() => getSavedRate() ?? L.rate, [L.rate]);
+  // 어린이 모드에서는 리피가 더 천천히 말한다 (직접 고른 속도가 있으면 그대로)
+  const rate = useCallback(() => getSavedRate() ?? (kids ? Math.min(L.rate, 0.75) : L.rate), [L.rate, kids]);
 
   useEffect(() => {
+    try {
+      const saved = localStorage.getItem(SCREEN_KEY);
+      if (saved === "chat" || saved === "video") setScreen(saved);
+    } catch {}
     setListenOk(canListen());
     return () => {
       listener.current?.abort();
@@ -155,7 +166,7 @@ export default function CallSession({
     if (!lesson) return;
     setPhase("call");
     playSfx("connect");
-    const first = addMessage(lesson.opening);
+    const first = addMessage({ ...lesson.opening, emotion: "happy" });
     // 전화 연결음이 끝난 뒤 리피가 말한다
     setTimeout(() => sayTutor(first), 650);
   }
@@ -195,7 +206,7 @@ export default function CallSession({
     setCallError(null);
     addMessage({ role: "user", text: said });
     setPartial("");
-    const r = await post<TurnResponse>("/api/call/turn", { lessonId: lesson.lessonId, said });
+    const r = await post<TurnResponse>("/api/call/turn", { lessonId: lesson.lessonId, said, kids });
     if (!r.ok) {
       // 내 말풍선은 남기고, 다시 말할 수 있게 한다
       setCallError(r.message);
@@ -250,7 +261,7 @@ export default function CallSession({
   async function askHint() {
     if (!lesson || hintBusy || hintsLeft <= 0) return;
     setHintBusy(true);
-    const r = await post<HintResponse>("/api/call/hint", { lessonId: lesson.lessonId });
+    const r = await post<HintResponse>("/api/call/hint", { lessonId: lesson.lessonId, kids });
     setHintBusy(false);
     if (!r.ok) {
       setCallError(r.message);
@@ -354,9 +365,43 @@ export default function CallSession({
               </div>
             ))}
           </section>
+          <section className="card" aria-label="통화 화면">
+            <div className="label">통화 화면</div>
+            <div className="btn-row" role="radiogroup" aria-label="통화 화면">
+              {(
+                [
+                  ["chat", "채팅", "글과 함께 보기"],
+                  ["video", "영상통화", "어린이 모드"],
+                ] as const
+              ).map(([id, title, sub]) => (
+                <button
+                  key={id}
+                  type="button"
+                  role="radio"
+                  aria-checked={screen === id}
+                  aria-pressed={screen === id}
+                  className="choice"
+                  style={{ flexDirection: "column", gap: 2, alignItems: "flex-start" }}
+                  onClick={() => {
+                    setScreen(id);
+                    playSfx("tap");
+                    try {
+                      localStorage.setItem(SCREEN_KEY, id);
+                    } catch {}
+                  }}
+                >
+                  <span className="choice-title">{title}</span>
+                  <span className="choice-desc">{sub}</span>
+                </button>
+              ))}
+            </div>
+            <div className="muted" style={{ fontSize: 13 }}>
+              레벨 1~2는 영상통화가 기본이에요. 고른 화면은 다음 수업에도 그대로예요.
+            </div>
+          </section>
           <RateControl />
           <p className="muted" style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>
-            선생님 말이 끝나면 마이크 버튼을 누르고 대답하세요. 막히면 힌트를 눌러도 돼요.
+            리피 말이 끝나면 마이크 버튼을 누르고 대답하세요. 막히면 힌트를 눌러도 돼요.
           </p>
         </div>
         <div className="bottom">
@@ -366,6 +411,32 @@ export default function CallSession({
           </button>
         </div>
       </main>
+    );
+  }
+
+  if ((phase === "call" || phase === "ending") && lesson && kids) {
+    return (
+      <KidsCall
+        lastTutor={lastTutor}
+        speaking={speakingId !== null}
+        mic={mic}
+        partial={partial}
+        turns={turns}
+        elapsed={mmss(elapsed)}
+        hint={hint}
+        hintBusy={hintBusy}
+        hintsLeft={hintsLeft}
+        error={callError}
+        ending={phase === "ending"}
+        listenOk={listenOk}
+        rate={rate()}
+        onMic={onMic}
+        onReplay={() => lastTutor && sayTutor(lastTutor)}
+        onHint={() => void askHint()}
+        onEnd={() => {
+          if (turns >= MIN_TURNS_FOR_REPORT || confirm("리피랑 조금 더 이야기하면 별을 받을 수 있어요. 끝낼까요?")) void end(turns);
+        }}
+      />
     );
   }
 
@@ -530,6 +601,41 @@ export default function CallSession({
   }
 
   // ───── 리포트 ─────
+  if (phase === "report" && result && kids && !showFullReport) {
+    return (
+      <>
+        <KidsReport
+          report={result.report}
+          rate={rate()}
+          onFull={() => setShowFullReport(true)}
+          onDone={() => {
+            router.replace("/home");
+            router.refresh();
+          }}
+        />
+        {showCelebration && result.milestone && (
+          <div className="celebrate" role="dialog" aria-modal="true" aria-label={`${result.milestone}일 연속 학습`}>
+            <div className="celebrate-flame">
+              <Reppy mood="wave" size={150} decorative />
+              <span className="celebrate-mini-flame">
+                <Flame streak={result.milestone} size={56} />
+              </span>
+            </div>
+            <div className="celebrate-num en">
+              {result.milestone}
+              <span>일</span>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>연속으로 학습했어요!</div>
+            <div style={{ flexGrow: 1 }} />
+            <button type="button" className="btn" style={{ background: "#fff", color: "var(--ink)" }} onClick={() => setShowCelebration(false)}>
+              계속하기
+            </button>
+          </div>
+        )}
+      </>
+    );
+  }
+
   if (phase === "report" && result) {
     const r = result.report;
     const lp = result.levelProgress;

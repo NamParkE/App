@@ -9,7 +9,7 @@ import type { HintResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
 
-const Body = z.object({ lessonId: z.string().uuid() });
+const Body = z.object({ lessonId: z.string().uuid(), kids: z.boolean().default(false) });
 
 export async function POST(request: Request) {
   const parsed = Body.safeParse(await request.json().catch(() => null));
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
 
   const lastTutor = [...lesson.history].reverse().find((m) => m.role === "tutor")?.text ?? lesson.plan.opening;
   try {
-    const answers = await hintAnswers({ level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle });
+    const answers = await hintAnswers({ level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle, kids: parsed.data.kids });
     after(async () => {
       await supabase.from("lessons").update({ hints: lesson.hints + 1 }).eq("id", lesson.id);
     });

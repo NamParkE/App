@@ -4,7 +4,18 @@ import { useId } from "react";
 // 그림 파일 없이 SVG 로 그려 가볍고, 표정마다 CSS 애니메이션이 붙는다 (globals.css 의 .reppy-*).
 // 나중에 일러스트레이터 그림으로 바꿀 때도 이 부품의 mood/size 약속은 그대로 두면 된다.
 
-export type ReppyMood = "idle" | "happy" | "talk" | "think" | "sleepy" | "wave";
+export type ReppyMood =
+  | "idle"
+  | "happy"
+  | "talk"
+  | "think"
+  | "sleepy"
+  | "wave"
+  | "surprised"
+  | "curious"
+  | "proud"
+  | "comfort"
+  | "listen";
 
 const LABEL: Record<ReppyMood, string> = {
   idle: "앵무새 리피",
@@ -13,16 +24,24 @@ const LABEL: Record<ReppyMood, string> = {
   think: "생각하는 리피",
   sleepy: "졸린 리피",
   wave: "손 흔드는 리피",
+  surprised: "놀란 리피",
+  curious: "궁금한 리피",
+  proud: "칭찬하는 리피",
+  comfort: "괜찮다고 말하는 리피",
+  listen: "듣고 있는 리피",
 };
 
 export default function Reppy({
   mood = "idle",
   size = 120,
   decorative = false,
+  talking = false,
   className,
 }: {
   mood?: ReppyMood;
   size?: number;
+  /** 표정은 그대로 두고 부리만 뻐끔거린다 (감정을 담아 말할 때) */
+  talking?: boolean;
   /** 옆에 같은 뜻의 글이 있으면 true (화면 읽기 프로그램이 두 번 읽지 않게) */
   decorative?: boolean;
   className?: string;
@@ -31,13 +50,28 @@ export default function Reppy({
   const id = (name: string) => `reppy-${name}-${uid}`;
   const url = (name: string) => `url(#${id(name)})`;
 
-  const happy = mood === "happy" || mood === "wave";
+  const happy = mood === "happy" || mood === "wave" || mood === "proud";
   const sleepy = mood === "sleepy";
   const think = mood === "think";
-  const open = mood === "talk" || happy;
-  const dx = think ? 2 : 0;
-  const dy = think ? -2.5 : 0;
-  const cls = ["reppy", `reppy-${mood}`, happy ? "reppy-happy" : "", className ?? ""].join(" ");
+  const surprised = mood === "surprised";
+  const curious = mood === "curious";
+  const listen = mood === "listen";
+  const soft = mood === "comfort";
+  const wingUp = mood === "wave" || mood === "proud";
+  const open = mood === "talk" || happy || surprised || talking;
+  let dx = 0;
+  let dy = 0;
+  if (think) [dx, dy] = [2, -2.5];
+  if (listen) [dx, dy] = [-2.5, 1.5];
+  if (curious) [dx, dy] = [1.5, -1];
+  const eyeScale = surprised ? 1.22 : 1;
+  const cls = [
+    "reppy",
+    `reppy-${mood}`,
+    happy && mood !== "proud" ? "reppy-happy" : "",
+    talking ? "reppy-talking" : "",
+    className ?? "",
+  ].join(" ");
 
   return (
     <svg
@@ -104,6 +138,29 @@ export default function Reppy({
           <text className="reppy-z reppy-z2" x="101" y="13" fontSize="17">Z</text>
         </g>
       )}
+      {surprised && (
+        <g className="reppy-float">
+          <path d="M101 10 L105 10 L104 30 L102 30 Z" fill="#F58A2A" />
+          <circle cx="103" cy="36" r="2.6" fill="#F58A2A" />
+        </g>
+      )}
+      {curious && (
+        <g className="reppy-float">
+          <path d="M96 14 Q96 6 104 6 Q112 6 112 13 Q112 18 106 20 Q104 21 104 25" fill="none" stroke="#3B67F2" strokeWidth="3.4" strokeLinecap="round" />
+          <circle cx="104" cy="31" r="2.4" fill="#3B67F2" />
+        </g>
+      )}
+      {(mood === "proud" || soft) && (
+        <g className="reppy-float">
+          <path d="M102 22 C98 16 90 20 94 27 L102 34 L110 27 C114 20 106 16 102 22 Z" fill="#FF7E9B" />
+        </g>
+      )}
+      {listen && (
+        <g fill="none" stroke="#8FB0FF" strokeWidth="2.6" strokeLinecap="round">
+          <path className="reppy-ring" d="M18 46 Q12 54 18 62" />
+          <path className="reppy-ring" d="M10 40 Q1 54 10 68" />
+        </g>
+      )}
       {happy && (
         <g>
           <path className="reppy-spark" d="M17 32 Q18 38 24 39 Q18 40 17 46 Q16 40 10 39 Q16 38 17 32 Z" fill="#FFD54F" />
@@ -122,7 +179,7 @@ export default function Reppy({
         <ellipse cx="60" cy="98" rx="14" ry="13" fill={url("belly")} />
         {/* 날개 */}
         <ellipse cx="38" cy="94" rx="7.5" ry="12" fill={url("wing")} transform="rotate(16 38 94)" />
-        {mood === "wave" ? (
+        {wingUp ? (
           <g className="reppy-wing-r">
             <ellipse cx="84" cy="80" rx="7.5" ry="12" fill={url("wing")} transform="rotate(35 84 80)" />
           </g>
@@ -147,28 +204,36 @@ export default function Reppy({
           {/* 눈 */}
           {happy ? (
             <path d="M42 55 Q48 47 54 55 M66 55 Q72 47 78 55" fill="none" stroke="#1A1F4A" strokeWidth="3.2" strokeLinecap="round" />
+          ) : soft ? (
+            <path d="M42 53 Q48 49 54 53 M66 53 Q72 49 78 53" fill="none" stroke="#1A1F4A" strokeWidth="3" strokeLinecap="round" />
           ) : sleepy ? (
             <path d="M42 54 Q48 59 54 54 M66 54 Q72 59 78 54" fill="none" stroke="#1A1F4A" strokeWidth="2.8" strokeLinecap="round" />
           ) : (
             [48, 72].map((x) => (
               <g key={x} className="reppy-eye">
-                <ellipse cx={x + dx} cy={53 + dy} rx="6.8" ry="8" fill={url("eye")} />
-                <circle cx={x + 2.4 + dx} cy={49.6 + dy} r="2.9" fill="#FFFFFF" />
+                <ellipse cx={x + dx} cy={53 + dy} rx={6.8 * eyeScale} ry={8 * eyeScale} fill={url("eye")} />
+                <circle cx={x + 2.4 + dx} cy={49.6 + dy - (surprised ? 1.5 : 0)} r="2.9" fill="#FFFFFF" />
                 <circle cx={x - 2.2 + dx} cy={56.6 + dy} r="1.3" fill="#FFFFFF" opacity="0.85" />
               </g>
             ))
           )}
 
-          <circle cx="38" cy="66" r="7.5" fill={url("cheek")} />
-          <circle cx="82" cy="66" r="7.5" fill={url("cheek")} />
+          <circle cx="38" cy="66" r={happy || soft ? 8.5 : 7.5} fill={url("cheek")} />
+          <circle cx="82" cy="66" r={happy || soft ? 8.5 : 7.5} fill={url("cheek")} />
 
           {/* 부리 */}
           <g className="reppy-jaw">
             <path
-              d={open ? "M55.5 69 Q60 71 64.5 69 Q64 77.5 60 78.5 Q56 77.5 55.5 69 Z" : "M56.5 69 Q60 70.5 63.5 69 Q62.5 73 60 73.6 Q57.5 73 56.5 69 Z"}
+              d={
+                surprised
+                  ? "M56 69 Q60 70 64 69 Q65 78 60 79.5 Q55 78 56 69 Z"
+                  : open
+                    ? "M55.5 69 Q60 71 64.5 69 Q64 77.5 60 78.5 Q56 77.5 55.5 69 Z"
+                    : "M56.5 69 Q60 70.5 63.5 69 Q62.5 73 60 73.6 Q57.5 73 56.5 69 Z"
+              }
               fill="#C24E16"
             />
-            {open && <ellipse cx="60" cy="74.5" rx="3" ry="2" fill="#FF8DA0" />}
+            {open && !surprised && <ellipse cx="60" cy="74.5" rx="3" ry="2" fill="#FF8DA0" />}
           </g>
           <path d="M53.5 63 Q60 58.5 66.5 63 Q66 69.5 60 73 Q54 69.5 53.5 63 Z" fill={url("beak")} />
           <ellipse cx="58" cy="62.5" rx="2.6" ry="1.2" fill="#FFE4BA" opacity="0.9" />
