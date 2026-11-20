@@ -4,7 +4,8 @@ import { currentUser } from "@/lib/data";
 import { describeClaudeError } from "@/lib/claude";
 import { hintAnswers } from "@/lib/call/claude";
 import { MAX_HINTS } from "@/lib/call/levels";
-import { fail, loadLesson } from "@/lib/call/server";
+import { fail, loadLesson, saveOrLog } from "@/lib/call/server";
+import { adminClient, MISSING_SERVICE_KEY } from "@/lib/supabase/admin";
 import type { HintResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
   if (!parsed.success) return fail(400, "잘못된 요청이에요.");
   const { supabase, userId } = await currentUser();
   if (!userId) return fail(401, "다시 로그인해 주세요.");
+  const admin = adminClient();
+  if (!admin) return fail(500, MISSING_SERVICE_KEY);
 
   const lesson = await loadLesson(supabase, parsed.data.lessonId);
   if (!lesson || lesson.status !== "active") return fail(404, "진행 중인 수업이 아니에요.");
@@ -25,7 +28,9 @@ export async function POST(request: Request) {
   try {
     const answers = await hintAnswers({ level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle, kids: parsed.data.kids });
     after(async () => {
-      await supabase.from("lessons").update({ hints: lesson.hints + 1 }).eq("id", lesson.id);
+      await saveOrLog(`hint count (lesson ${lesson.id})`, () =>
+        admin.from("lessons").update({ hints: lesson.hints + 1, last_active_at: new Date().toISOString() }).eq("id", lesson.id).eq("user_id", userId),
+      );
     });
     const body: HintResponse = { answers, hintsLeft: MAX_HINTS - lesson.hints - 1 };
     return NextResponse.json(body);

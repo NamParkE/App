@@ -33,7 +33,7 @@
 ### 1. Supabase
 
 1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 지역은 Northeast Asia (Seoul)를 추천합니다.
-2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
+2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql` → `0005_call_exceptions.sql` → `0006_refund_lockdown.sql` → `0007_server_writes.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
 3. 같은 곳에서 관리자(가족 계정을 만들 사람) 이메일을 등록합니다.
    ```sql
    insert into public.owner_emails (email) values ('관리자@gmail.com');
@@ -54,6 +54,7 @@
 1. 이 GitHub 저장소를 Vercel에서 Import 합니다.
 2. Environment Variables에 [`.env.example`](.env.example)의 항목을 넣습니다.
    - `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`: Supabase → Project Settings → API
+   - `SUPABASE_SERVICE_ROLE_KEY`: Supabase → Project Settings → API의 `service_role` 키. 수업 기록 · 학습 점수처럼 사용자가 직접 고치면 안 되는 기록을 서버가 쓸 때만 씁니다. **`NEXT_PUBLIC_`을 붙이지 마세요** (붙이면 브라우저로 나갑니다). 없으면 전화영어 수업이 시작되지 않습니다.
    - `ANTHROPIC_API_KEY`: Anthropic 콘솔에서 발급. 서버에서만 쓰이고 브라우저로 나가지 않습니다.
    - `CLAUDE_MODEL`: `claude-haiku-5-5` (비워 두어도 Haiku를 씁니다)
 3. Deploy를 누릅니다.

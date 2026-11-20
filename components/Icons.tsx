@@ -144,3 +144,10 @@ export const SendIcon = ({ size = 20, color = "currentColor" }: P) => (
     <path d="M12 5l7 7-7 7" />
   </svg>
 );
+
+export const InfoIcon = ({ size = 14, color = "currentColor" }: P) => (
+  <svg {...base(size, color)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M12 8v4M12 16h.01" />
+  </svg>
+);

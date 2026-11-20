@@ -29,6 +29,8 @@ export interface ChatMessage {
   text: string;
   ko?: string | null;
   correction?: Correction | null;
+  /** false 면 엉뚱한 대답이라 대답 수에 넣지 않았다 (학생 말에만) */
+  counted?: boolean;
   emotion?: Emotion;
 }
 
@@ -45,6 +47,22 @@ export interface TurnResponse {
   reply: ChatMessage;
   turns: number;
   done: boolean;
+  /** 방금 대답을 대답 수에 넣었는지 */
+  counted: boolean;
+}
+
+/** 끊긴 통화 이어하기: 시작 응답 + 지금까지의 대화 */
+export interface ResumeResponse extends StartResponse {
+  history: ChatMessage[];
+  turns: number;
+  hintsLeft: number;
+  sosLeft: number;
+}
+
+/** 한국어로 묻기 */
+export interface SosResponse {
+  answer: { en: string; ko: string };
+  sosLeft: number;
 }
 
 export interface HintResponse {
@@ -67,6 +85,8 @@ export interface EndResponse {
   milestone: number | null;
   levelProgress: { level: number; good: number; needed: number };
   suggest: "up" | "down" | null;
+  /** 대답 없이 끝나 연습 횟수를 돌려줬는지 */
+  refunded: boolean;
 }
 
 export interface ReviewItem {

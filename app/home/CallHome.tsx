@@ -2,11 +2,13 @@ import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { StreakChip } from "@/components/Flame";
 import { ChevronIcon, PhoneIcon, ReplayIcon } from "@/components/Icons";
-import { callLevel, LESSON_USAGE_COST, LEVEL_UP_COUNT, LEVEL_UP_SCORE } from "@/lib/call/levels";
+import { callLevel, LESSON_USAGE_COST, LEVEL_UP_COUNT, LEVEL_UP_SCORE, RESUME_MINUTES } from "@/lib/call/levels";
+import type { ActiveLessonRow } from "@/lib/call/rules";
 import type { Profile } from "@/lib/types";
 import TopicPicker from "./TopicPicker";
 import { ModeTabs } from "./ModeSwitch";
 import HomeReppy from "./HomeReppy";
+import ResumeCard from "./ResumeCard";
 
 export interface CallTopic {
   id: string;
@@ -39,6 +41,7 @@ export default function CallHome({
   lessons,
   dueCount,
   usageLeft,
+  resumable,
 }: {
   profile: Profile;
   streak: { streak: number; studiedToday: boolean };
@@ -46,6 +49,8 @@ export default function CallHome({
   lessons: LessonRow[];
   dueCount: number;
   usageLeft: number;
+  /** 30분 안에 끊긴 통화 */
+  resumable: ActiveLessonRow | null;
 }) {
   const level = profile.call_level;
   const L = callLevel(level);
@@ -66,6 +71,7 @@ export default function CallHome({
   const recent = lessons.filter((l) => l.status === "done").slice(0, 3);
   const titleOf = new Map(topics.map((t) => [t.id, t.title_ko]));
   const canStart = usageLeft >= LESSON_USAGE_COST;
+  const minutesAgo = resumable ? Math.floor((Date.now() - new Date(resumable.last_active_at).getTime()) / 60000) : 0;
 
   return (
     <main className="screen">
@@ -108,15 +114,27 @@ export default function CallHome({
           </div>
         </section>
 
+        {resumable && (
+          <ResumeCard
+            lessonId={resumable.id}
+            title={titleOf.get(resumable.topic_id) ?? resumable.topic_id}
+            turns={resumable.turns}
+            minutesAgo={minutesAgo}
+            minutesLeft={Math.max(1, RESUME_MINUTES - minutesAgo)}
+          />
+        )}
+
         {next && (
-          <section className="usage" aria-label="오늘의 수업">
+          <section className="usage" aria-label="오늘의 수업" style={resumable ? { opacity: 0.55 } : undefined}>
             <div className="row" style={{ alignItems: "center" }}>
               <div style={{ fontSize: 13, color: "var(--dark-muted)" }}>오늘의 수업 · 약 10분</div>
               <TopicPicker topics={forLevel.map((t) => ({ id: t.id, title_ko: t.title_ko, title_en: t.title_en, done: lastDone.has(t.id) }))} />
             </div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>{next.title_ko}</div>
             <div className="en" style={{ fontSize: 13, color: "var(--dark-muted)" }}>{next.title_en}</div>
-            {canStart ? (
+            {resumable ? (
+              <div style={{ fontSize: 14, color: "var(--dark-muted)" }}>끊긴 통화를 이어서 마치거나 그만두면 시작할 수 있어요</div>
+            ) : canStart ? (
               <Link href={`/call?topic=${next.id}`} className="btn btn-primary" style={{ height: 52 }}>
                 <PhoneIcon color="#FFFFFF" />
                 수업 시작 <span style={{ fontWeight: 500, fontSize: 13 }}>(사용량 {LESSON_USAGE_COST}회)</span>

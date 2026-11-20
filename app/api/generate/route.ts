@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/data";
+import { chargeUsage, refundCharge } from "@/lib/usage";
 import { describeClaudeError, generateSentences } from "@/lib/claude";
 import type { Profile, Topic } from "@/lib/types";
 
@@ -36,15 +37,15 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: true });
   }
 
-  const { data: left, error: usageError } = await supabase.rpc("consume_usage");
-  if (usageError) return fail(500, "사용량을 확인하지 못했어요.");
-  if ((left as number) < 0) return fail(429, "오늘 연습 횟수를 다 썼어요. 내일 다시 만나요!");
+  const charge = await chargeUsage(supabase);
+  if (!charge) return fail(500, "사용량을 확인하지 못했어요.");
+  if (charge.left < 0) return fail(429, "오늘 연습 횟수를 다 썼어요. 내일 다시 만나요!");
 
   let generated;
   try {
     generated = await generateSentences(topic, profile.level);
   } catch (e) {
-    await supabase.rpc("refund_usage");
+    await refundCharge(supabase, charge.ticket);
     console.error("generate failed", e);
     const { status, message } = describeClaudeError(e);
     return fail(status, `답변을 만들지 못했어요. ${message}`);

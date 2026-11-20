@@ -118,17 +118,18 @@ export interface Listener {
 }
 
 /**
- * 영어 음성을 듣는다. 말하는 동안 onPartial 로 중간 결과를, 끝나면 onDone 으로 최종 문장을 준다.
+ * 음성을 듣는다 (기본 영어, "한국어로 묻기"는 ko-KR). 말하는 동안 onPartial 로 중간 결과를, 끝나면 onDone 으로 최종 문장을 준다.
  */
 export function listen(handlers: {
   onPartial: (text: string) => void;
   onDone: (text: string) => void;
   onError: (code: string) => void;
+  lang?: "en-US" | "ko-KR";
 }): Listener | null {
   const Ctor = getCtor();
   if (!Ctor) return null;
   const rec = new Ctor();
-  rec.lang = "en-US";
+  rec.lang = handlers.lang ?? "en-US";
   rec.interimResults = true;
   rec.continuous = true;
   rec.maxAlternatives = 1;

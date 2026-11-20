@@ -1,6 +1,8 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
 import { currentUser } from "@/lib/data";
+import { chargeUsage, refundCharge } from "@/lib/usage";
+import { adminClient } from "@/lib/supabase/admin";
 import { coachAttempt, describeClaudeError } from "@/lib/claude";
 import { compareSentences, pairKey } from "@/lib/diff";
 import { MEMORIZED_SCORE, one, type FeedbackResponse, type SentenceStatus } from "@/lib/types";
@@ -58,12 +60,13 @@ export async function POST(request: Request) {
   if (diff.score === 100) {
     coachSkipped = "perfect"; // 다 맞으면 AI를 부르지 않는다
   } else {
-    const { data: left, error } = await supabase.rpc("consume_usage");
-    if (error || (left as number) < 0) {
+    const charge = await chargeUsage(supabase);
+    if (!charge || charge.left < 0) {
       coachSkipped = "limit";
       usageLeft = 0;
     } else {
-      usageLeft = left as number;
+      const charged = charge.left;
+      usageLeft = charged;
       try {
         const coaching = await coachAttempt(sentence.en, said, diff);
         const allowed = new Set(diff.replacements.map(pairKey));
@@ -76,8 +79,7 @@ export async function POST(request: Request) {
       } catch (e) {
         console.error("coach failed", e);
         coachError = describeClaudeError(e).message;
-        await supabase.rpc("refund_usage");
-        usageLeft += 1;
+        if (await refundCharge(supabase, charge.ticket)) usageLeft = charged + 1;
         coachSkipped = "error";
         headline = localHeadline(diff.score);
       }
@@ -110,7 +112,11 @@ export async function POST(request: Request) {
 
   const newlyMemorized = status === "memorized" && prev?.status !== "memorized";
   after(async () => {
-    await supabase.rpc("bump_activity", { p_practices: 1, p_memorized: newlyMemorized ? 1 : 0 });
+    // 학습 점수는 서버 연결로만 올린다 (키가 없으면 점수만 건너뛴다)
+    const admin = adminClient();
+    if (!admin) return;
+    const { error } = await admin.rpc("bump_activity_for", { p_uid: userId, p_practices: 1, p_memorized: newlyMemorized ? 1 : 0 });
+    if (error) console.error("[feedback] activity failed", error);
   });
 
   const body: FeedbackResponse = { diff, headline, tips, coachSkipped, coachError, usageLeft, status };

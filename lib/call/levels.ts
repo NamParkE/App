@@ -63,3 +63,9 @@ export const LEVEL_UP_SCORE = 80;
 export const LEVEL_UP_COUNT = 3;
 export const LEVEL_DOWN_SCORE = 50;
 export const STREAK_MILESTONES = [3, 7, 14, 30, 50, 100];
+/** 엉뚱한 대답을 연속으로 세지 않는 최대 횟수. 그다음 대답은 그냥 센다 (무한 반복 방지) */
+export const MAX_SKIPS = 2;
+/** 수업당 "한국어로 묻기" 횟수 (힌트와 따로) */
+export const MAX_SOS = 2;
+/** 끊긴 통화를 이어서 할 수 있는 시간 (마지막으로 주고받은 때부터) */
+export const RESUME_MINUTES = 30;

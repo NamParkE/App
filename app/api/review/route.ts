@@ -1,5 +1,6 @@
 import { after, NextResponse } from "next/server";
 import { z } from "zod";
+import { adminClient } from "@/lib/supabase/admin";
 import { currentUser, todayKst } from "@/lib/data";
 import { compareSentences } from "@/lib/diff";
 import { fail } from "@/lib/call/server";
@@ -38,7 +39,10 @@ export async function POST(request: Request) {
   after(async () => {
     await Promise.all([
       supabase.from("expressions").update({ stage, next_review_on: next }).eq("id", ex.id),
-      supabase.rpc("bump_activity", { p_reviews: 1 }),
+      // 학습 점수는 서버 연결로만 올린다 (키가 없으면 점수만 건너뛴다)
+      adminClient()
+        ?.rpc("bump_activity_for", { p_uid: userId, p_reviews: 1 })
+        .then(({ error }) => error && console.error("[review] activity failed", error)),
     ]);
   });
   return NextResponse.json({ diff, passed, stage });
