@@ -36,6 +36,10 @@
 5. **Authentication → URL Configuration**
    - Site URL: `https://<배포 주소>`
    - Redirect URLs: `https://<배포 주소>/auth/callback` (로컬 개발 시 `http://localhost:3000/auth/callback`도 추가)
+6. **Authentication → Emails → Magic Link** 템플릿의 링크를 아래로 바꿉니다. 메일 앱 안의 브라우저처럼, 로그인을 요청한 곳과 다른 브라우저에서 링크를 열어도 로그인됩니다.
+   ```html
+   <a href="{{ .SiteURL }}/auth/callback?token_hash={{ .TokenHash }}&type=email">로그인하기</a>
+   ```
 
 ### 2. Vercel
 
