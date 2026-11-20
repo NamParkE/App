@@ -5,6 +5,7 @@ import { ChevronIcon, PhoneIcon, ReplayIcon } from "@/components/Icons";
 import { callLevel, LESSON_USAGE_COST, LEVEL_UP_COUNT, LEVEL_UP_SCORE } from "@/lib/call/levels";
 import type { Profile } from "@/lib/types";
 import TopicPicker from "./TopicPicker";
+import { ModeTabs } from "./ModeSwitch";
 
 export interface CallTopic {
   id: string;
@@ -71,7 +72,8 @@ export default function CallHome({
         <div className="row" style={{ alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div className="muted" style={{ fontSize: 14 }}>{profile.display_name}님, 오늘도 한 통화</div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>전화영어</h1>
+            <h1 className="sr-only">전화영어</h1>
+            <ModeTabs badge={`Lv.${level}`} />
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>

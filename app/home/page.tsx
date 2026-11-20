@@ -5,6 +5,7 @@ import { ChevronIcon, PlayIcon } from "@/components/Icons";
 import { checkProfile, fetchProfile, myStreak, requireUser, todayKst, usageToday } from "@/lib/data";
 import { StreakChip } from "@/components/Flame";
 import CallHome, { type CallTopic, type LessonRow } from "./CallHome";
+import HomeModeSwitch, { ModeTabs } from "./ModeSwitch";
 import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
 import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
 
@@ -46,19 +47,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const profile = checkProfile(rawProfile);
   const left = Math.max(0, profile.daily_limit - used);
 
-  if (profile.style === "vocab") {
-    return (
-      <CallHome
-        profile={profile}
-        streak={streak}
-        topics={callTopics ?? []}
-        lessons={lessons ?? []}
-        dueCount={dueCount ?? 0}
-        usageLeft={left}
-      />
-    );
-  }
-
   const progress = progressFor(progressRows, profile.level);
 
   const leftPct = profile.daily_limit ? Math.round((left / profile.daily_limit) * 100) : 0;
@@ -77,15 +65,25 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     };
   });
 
-  return (
+  const callView = (
+    <CallHome
+      profile={profile}
+      streak={streak}
+      topics={callTopics ?? []}
+      lessons={lessons ?? []}
+      dueCount={dueCount ?? 0}
+      usageLeft={left}
+    />
+  );
+
+  const memorizeView = (
     <main className="screen">
       <div className="pad">
         <div className="row" style={{ alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
             <div className="muted" style={{ fontSize: 14 }}>{profile.display_name}님, 오늘도 한 주제씩</div>
-            <h1 style={{ margin: 0, fontSize: 22, fontWeight: 700, letterSpacing: -0.3 }}>
-              오픽 암기형 <span className="badge" style={{ verticalAlign: "middle" }}>{profile.level}</span>
-            </h1>
+            <h1 className="sr-only">오픽 암기형</h1>
+            <ModeTabs badge={profile.level} />
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
@@ -125,4 +123,6 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       <BottomNav current="/home" />
     </main>
   );
+
+  return <HomeModeSwitch userId={userId} initial={profile.style} memorize={memorizeView} call={callView} />;
 }
