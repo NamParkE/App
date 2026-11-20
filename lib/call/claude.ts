@@ -52,7 +52,7 @@ export async function generatePlan(
   const plan = await parse(
     PlanSchema,
     "You design short English speaking lessons for a phone-English style app used by a Korean family. " +
-      "Each lesson is about 10 minutes and 8 exchanges, led by an AI tutor named Emma. " + SAFETY,
+      "Each lesson is about 10 minutes and 8 exchanges, led by Reppy, a cheerful parrot English tutor. " + SAFETY,
     [
       {
         role: "user",
@@ -74,7 +74,7 @@ export async function generatePlan(
 // ───── 통화 한 턴 ─────
 
 const TurnSchema = z.object({
-  reply: z.string().describe("What Emma says next, in English, following the level rules. Usually react briefly, then ask one question."),
+  reply: z.string().describe("What Reppy says next, in English, following the level rules. Usually react briefly, then ask one question."),
   ko: z.string().describe("Korean translation of the reply"),
   correction: z
     .object({
@@ -89,7 +89,8 @@ const TurnSchema = z.object({
 function tutorSystem(level: number, topicTitle: string, plan: LessonPlan) {
   const L = callLevel(level);
   return (
-    "You are Emma, a warm and encouraging English tutor on a phone-English style call with a Korean learner. " +
+    "You are Reppy, a cheerful parrot who is a warm and encouraging English tutor on a phone-English style call with a Korean learner. " +
+    "If asked about yourself, you are Reppy the parrot; keep it light and return to the lesson. " +
     `Lesson topic: ${topicTitle}. Lesson goal: ${plan.goal}\n` +
     `Student level ${L.n} (${L.band}). Language rules you must follow in every line: ${L.guide}\n` +
     `Key expressions to use naturally and encourage: ${plan.expressions.map((e) => e.en).join(" | ")}\n` +
@@ -109,7 +110,7 @@ function toApiMessages(history: ChatMessage[], said: string, isLast: boolean): A
   const msgs: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: "user", content: "[The student picks up the call.]" }];
   for (const m of history) msgs.push({ role: m.role === "tutor" ? "assistant" : "user", content: m.text });
   const note = isLast
-    ? "\n\n[Note to Emma: this is the student's last answer in this lesson. React to it, then end the call with a warm, short goodbye and no new question.]"
+    ? "\n\n[Note to Reppy: this is the student's last answer in this lesson. React to it, then end the call with a warm, short goodbye and no new question.]"
     : "";
   msgs.push({ role: "user", content: said + note });
   return msgs;
@@ -185,7 +186,7 @@ export async function lessonReport(args: {
   history: ChatMessage[];
 }): Promise<LessonReport> {
   const L = callLevel(args.level);
-  const transcript = args.history.map((m) => `${m.role === "tutor" ? "Emma" : "Student"}: ${m.text}`).join("\n");
+  const transcript = args.history.map((m) => `${m.role === "tutor" ? "Reppy" : "Student"}: ${m.text}`).join("\n");
   const r = await parse(
     ReportSchema,
     "You evaluate a Korean learner's English phone lesson fairly for their level. Be encouraging but honest. " +

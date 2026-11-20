@@ -6,6 +6,7 @@ import { callLevel, LESSON_USAGE_COST, LEVEL_UP_COUNT, LEVEL_UP_SCORE } from "@/
 import type { Profile } from "@/lib/types";
 import TopicPicker from "./TopicPicker";
 import { ModeTabs } from "./ModeSwitch";
+import HomeReppy from "./HomeReppy";
 
 export interface CallTopic {
   id: string;
@@ -77,6 +78,8 @@ export default function CallHome({
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
+
+        <HomeReppy streak={streak.streak} studiedToday={streak.studiedToday} mode="vocab" />
 
         <section className="card" aria-label="내 레벨">
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

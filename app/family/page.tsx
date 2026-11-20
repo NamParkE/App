@@ -1,5 +1,6 @@
 import BottomNav from "@/components/BottomNav";
 import Flame from "@/components/Flame";
+import Reppy from "@/components/Reppy";
 import { requireProfile } from "@/lib/data";
 
 interface BoardRow {
@@ -31,7 +32,7 @@ export default async function FamilyPage() {
   const { supabase, userId, profile } = await requireProfile();
   const [{ data: board }, { data: family }] = await Promise.all([
     supabase.rpc("family_board"),
-    supabase.from("families").select("name").maybeSingle<{ name: string }>(),
+    supabase.from("families").select("name, invite_code").maybeSingle<{ name: string; invite_code: string }>(),
   ]);
   const rows = (board ?? []) as BoardRow[];
   const { label, todayIdx } = weekRange();
@@ -48,9 +49,19 @@ export default async function FamilyPage() {
         </div>
 
         {rows.length <= 1 && (
-          <p className="notice">
-            아직 가족이 없어요. 내 정보의 초대 코드를 가족에게 알려 주면 여기서 함께 볼 수 있어요.
-          </p>
+          <section className="card" style={{ alignItems: "center", textAlign: "center", gap: 8 }}>
+            <Reppy mood="idle" size={120} decorative />
+            <div style={{ fontSize: 17, fontWeight: 700 }}>같이 할 가족이 아직 없어요</div>
+            <div className="muted" style={{ fontSize: 14, lineHeight: 1.55 }}>
+              초대 코드를 가족에게 알려 주면 여기서 함께 순위를 볼 수 있어요.
+            </div>
+            {family?.invite_code && (
+              <div className="row" style={{ gap: 10, background: "var(--bg)", borderRadius: 14, padding: "10px 14px", marginTop: 4 }}>
+                <span className="muted" style={{ fontSize: 13 }}>초대 코드</span>
+                <b className="en" style={{ fontSize: 20, letterSpacing: 3 }}>{family.invite_code}</b>
+              </div>
+            )}
+          </section>
         )}
 
         <ol className="board" aria-label="이번 주 학습 순위">

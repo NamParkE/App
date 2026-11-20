@@ -18,6 +18,7 @@ import type {
 import ReviewRunner from "@/components/ReviewRunner";
 import RateControl from "@/components/RateControl";
 import Flame, { flameBadge } from "@/components/Flame";
+import Reppy, { type ReppyMood } from "@/components/Reppy";
 import { BulbIcon, CloseIcon, MicIcon, PhoneIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 
 type Phase = "review" | "starting" | "prep" | "call" | "ending" | "report" | "error";
@@ -250,6 +251,7 @@ export default function CallSession({
   }
 
   const lastTutor = [...messages].reverse().find((m) => m.role === "tutor");
+  const headMood: ReppyMood = speakingId !== null ? "talk" : mic === "waiting" || phase === "ending" ? "think" : "idle";
 
   function toggle(id: number, key: "showText" | "showKo") {
     setMessages((list) => list.map((m) => (m.id === id ? { ...m, [key]: !m[key] } : m)));
@@ -291,9 +293,10 @@ export default function CallSession({
           {phase === "starting" ? (
             <>
               <span style={{ display: "flex" }}>
-                <SpinnerIcon size={32} color="var(--accent)" />
+                <Reppy mood="think" size={140} decorative />
               </span>
-              <div className="muted">Emma 선생님과 연결하는 중…</div>
+              <div style={{ fontSize: 16, fontWeight: 700 }}>리피에게 전화 거는 중…</div>
+              <div className="muted" style={{ fontSize: 14 }}>오늘 수업을 준비하고 있어요</div>
             </>
           ) : (
             <>
@@ -358,10 +361,12 @@ export default function CallSession({
     return (
       <main className="screen call-screen">
         <header className="call-head">
-          <div className="avatar en" aria-hidden="true">Em</div>
+          <div className="reppy-avatar">
+            <Reppy mood={headMood} size={58} decorative />
+          </div>
           <div style={{ display: "flex", flexDirection: "column", flexGrow: 1, minWidth: 0 }}>
             <div style={{ fontSize: 15, fontWeight: 700 }}>
-              Emma 선생님 <span className="en" style={{ fontSize: 12, color: "var(--accent)" }}>Lv.{lesson.level}</span>
+              리피 선생님 <span className="en" style={{ fontSize: 12, color: "var(--accent)" }}>Lv.{lesson.level}</span>
             </div>
             <div className="call-status">
               <span className="dot" aria-hidden="true" />
@@ -428,8 +433,11 @@ export default function CallSession({
           )}
           {mic === "waiting" && (
             <div className="msg tutor">
-              <div className="msg-bubble typing" aria-label="선생님이 대답을 준비하고 있어요">
-                <span /><span /><span />
+              <div className="reppy-row">
+                <Reppy mood="think" size={44} decorative />
+                <div className="msg-bubble typing" aria-label="리피가 대답을 준비하고 있어요">
+                  <span /><span /><span />
+                </div>
               </div>
             </div>
           )}
@@ -453,7 +461,7 @@ export default function CallSession({
           )}
           {phase === "ending" && (
             <div className="muted" style={{ display: "flex", gap: 10, alignItems: "center", justifyContent: "center", padding: 12, fontSize: 14 }}>
-              <SpinnerIcon color="var(--accent)" /> 리포트를 만드는 중…
+              <Reppy mood="think" size={48} decorative /> 리포트를 만드는 중…
             </div>
           )}
           {callError && <p className="error" role="alert">{callError}</p>}
@@ -501,8 +509,8 @@ export default function CallSession({
               : mic === "rec"
                 ? "다 말했으면 버튼을 눌러 멈추세요"
                 : mic === "waiting"
-                  ? "선생님이 대답을 준비하고 있어요"
-                  : "선생님 말이 끝나면 버튼을 누르고 대답하세요"}
+                  ? "리피가 대답을 준비하고 있어요"
+                  : "리피 말이 끝나면 버튼을 누르고 대답하세요"}
           </div>
         </div>
       </main>
@@ -621,7 +629,7 @@ export default function CallSession({
                   <div className="label">대화 다시 보기</div>
                   {messages.map((m) => (
                     <div key={m.id} style={{ fontSize: 14, lineHeight: 1.5 }}>
-                      <b>{m.role === "tutor" ? "Emma" : name}</b> <span className="en" lang="en">{m.text}</span>
+                      <b>{m.role === "tutor" ? "리피" : name}</b> <span className="en" lang="en">{m.text}</span>
                     </div>
                   ))}
                 </section>
@@ -650,7 +658,10 @@ export default function CallSession({
         {showCelebration && result.milestone && (
           <div className="celebrate" role="dialog" aria-modal="true" aria-label={`${result.milestone}일 연속 학습`}>
             <div className="celebrate-flame">
-              <Flame streak={result.milestone} size={120} />
+              <Reppy mood="wave" size={150} decorative />
+              <span className="celebrate-mini-flame">
+                <Flame streak={result.milestone} size={56} />
+              </span>
             </div>
             {flameBadge(result.milestone) && <div className="celebrate-badge">{flameBadge(result.milestone)} 배지 획득</div>}
             <div className="celebrate-num en">
@@ -659,7 +670,7 @@ export default function CallSession({
             </div>
             <div style={{ fontSize: 20, fontWeight: 700 }}>연속으로 학습했어요!</div>
             <div style={{ color: "var(--dark-muted)", fontSize: 15, textAlign: "center", lineHeight: 1.5 }}>
-              내일도 한 통화 해요!
+              <span className="en" style={{ fontWeight: 600 }}>Amazing!</span> 리피랑 내일도 이야기해요!
             </div>
             <div style={{ flexGrow: 1 }} />
             <button type="button" className="btn" style={{ background: "#fff", color: "var(--ink)" }} onClick={() => setShowCelebration(false)}>
