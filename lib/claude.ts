@@ -60,8 +60,8 @@ export function describeClaudeError(e: unknown): { status: number; message: stri
 // 서버 측 거절 대체(fallback)를 지원하는 모델만 켠다. Haiku 는 지원하지 않는다.
 const FALLBACK_MODELS = new Set(["claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5", "claude-fable-5-2", "claude-fable-5-1"]);
 
-export function fallbackParams() {
-  return FALLBACK_MODELS.has(MODEL)
+export function fallbackParams(model: string = MODEL) {
+  return FALLBACK_MODELS.has(model)
     ? { betas: ["server-side-fallback-2026-07-01"], fallbacks: "default" as const }
     : {};
 }

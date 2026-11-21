@@ -13,6 +13,7 @@ import { closeStale, splitActive, type ActiveLessonRow } from "@/lib/call/server
 import { adminClient } from "@/lib/supabase/admin";
 import { countByTopic, pickDue, RECALL_SESSION } from "@/lib/recall";
 import { dueRecallRows } from "@/lib/recallServer";
+import { monthStartKst } from "@/lib/mock";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ cat?: string }> }) {
   const { cat } = await searchParams;
@@ -21,7 +22,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   // 서로 기다릴 필요가 없는 조회를 한꺼번에 보낸다 (DB 왕복 1번).
   // 학습 스타일을 몰라도 되도록 두 모드에 필요한 조회를 모두 함께 보낸다 (작은 조회라 동시에 보내는 편이 빠르다).
-  const [rawProfile, { data: topics }, progressRows, used, { data: last }, streak, { data: callTopics }, { data: lessons }, { count: dueCount }, { data: active }, recallRows] =
+  const [rawProfile, { data: topics }, progressRows, used, { data: last }, streak, { data: callTopics }, { data: lessons }, { count: dueCount }, { data: active }, recallRows, { data: mockRow }, { count: mockUsed }] =
     await Promise.all([
       fetchProfile(supabase, userId),
       supabase.from("topics").select("*").order("sort").returns<Topic[]>(),
@@ -56,6 +57,14 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         .eq("status", "active")
         .returns<ActiveLessonRow[]>(),
       dueRecallRows(supabase, userId),
+      // 실전 모의고사: 이번 달 남은 횟수
+      supabase.from("profiles").select("mock_monthly_limit").eq("id", userId).maybeSingle<{ mock_monthly_limit: number }>(),
+      supabase
+        .from("mock_exams")
+        .select("id", { count: "exact", head: true })
+        .eq("user_id", userId)
+        .eq("status", "done")
+        .gte("finished_at", monthStartKst()),
     ]);
   // 끊긴 통화: 30분 안이면 이어하기 카드, 지난 것은 응답 뒤에 닫는다 (대답 0번이면 환불)
   const { resumable, stale } = splitActive(active ?? []);
@@ -212,6 +221,16 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
             <span className="sub">아래 목록에서 다시 복습할 주제를 골라 보세요.</span>
           </section>
         )}
+
+        <Link href="/mock" className="card" style={{ gap: 6, textDecoration: "none", color: "inherit" }}>
+          <span className="label">실전 모의고사</span>
+          <span className="row" style={{ alignItems: "center" }}>
+            <span style={{ fontSize: 15, fontWeight: 700 }}>실제처럼 40분 · 15문항</span>
+            <span className="muted" style={{ fontSize: 13 }}>
+              이달 {Math.max(0, (mockRow?.mock_monthly_limit ?? 3) - (mockUsed ?? 0))}회 남음
+            </span>
+          </span>
+        </Link>
 
         <TopicBrowser items={items} initialCat={category} />
       </div>

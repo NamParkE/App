@@ -2,7 +2,7 @@
 // 금액은 토큰 수에 모델 가격을 곱한 추정치다. 실제 청구액은 Anthropic 콘솔에서 확인한다.
 
 /** AI 호출 종류 (DB: ai_calls.kind) */
-export const AI_KINDS = ["answer", "coach", "plan", "turn", "hint", "sos", "report", "script"] as const;
+export const AI_KINDS = ["answer", "coach", "plan", "turn", "hint", "sos", "report", "script", "mock"] as const;
 export type AiKind = (typeof AI_KINDS)[number];
 
 export const AI_KIND_LABEL: Record<AiKind, string> = {
@@ -14,6 +14,7 @@ export const AI_KIND_LABEL: Record<AiKind, string> = {
   sos: "한국어로 묻기",
   plan: "수업 계획",
   script: "스크립트 확인",
+  mock: "모의고사 리포트",
 };
 
 /** 응답의 usage 중 비용에 쓰는 칸 (SDK 응답의 usage 를 그대로 넘겨도 된다) */

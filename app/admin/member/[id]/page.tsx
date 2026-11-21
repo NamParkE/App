@@ -5,6 +5,7 @@ import { BackIcon } from "@/components/Icons";
 import { rate, requireOperator, weekdayKo, type MemberDetail } from "@/lib/admin";
 import { formatKrw, toKrw } from "@/lib/pricing";
 import LimitForm from "./LimitForm";
+import MockLimitForm from "./MockLimitForm";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -18,7 +19,11 @@ export default async function AdminMemberPage({ params }: { params: Promise<{ id
   const { id } = await params;
   if (!UUID.test(id)) notFound();
   const { supabase } = await requireOperator();
-  const { data, error } = await supabase.rpc("admin_member", { p_user: id });
+  const [{ data, error }, { data: mockData }] = await Promise.all([
+    supabase.rpc("admin_member", { p_user: id }),
+    supabase.rpc("admin_member_mock", { p_user: id }),
+  ]);
+  const mock = mockData as { mock_limit: number; used_month: number; exams: { finished_at: string; grade: string | null }[] } | null;
   if (error) {
     console.error("[admin] member failed", error);
     return <AdminError back="/admin" />;
@@ -55,6 +60,16 @@ export default async function AdminMemberPage({ params }: { params: Promise<{ id
           <p className="muted" style={{ margin: "-8px 4px 0", fontSize: 12 }}>
             마지막 변경: {changedLabel(m.last_change.changed_at)} {m.last_change.old_limit}회 → {m.last_change.new_limit}회
           </p>
+        )}
+
+        {mock && (
+          <MockLimitForm
+            key={`mock-${mock.mock_limit}`}
+            userId={m.user_id}
+            initialLimit={mock.mock_limit}
+            usedMonth={mock.used_month}
+            grades={mock.exams.map((e) => e.grade)}
+          />
         )}
 
         <section className="card">
