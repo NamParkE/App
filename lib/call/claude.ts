@@ -5,7 +5,7 @@ import { z } from "zod";
 import { ClaudeRefusalError, client, fallbackParams, MODEL } from "../claude";
 import { logAiCall, type AiMeter } from "../aiLog";
 import { callLevel, LESSON_TURNS } from "./levels";
-import { nextQuestionIndex, withOpening } from "./rules";
+import { studentFacts, withOpening } from "./rules";
 import { EMOTIONS, type ChatMessage, type Correction, type Emotion, type LessonPlan, type LessonReport } from "./types";
 
 // 전화영어 모드의 Claude 호출. 모두 짧은 응답이라 effort low 로 빠르게 받는다.
@@ -119,20 +119,21 @@ const KIDS_RULES =
   "lots of warm praise, and only one easy question at a time. Never correct directly; just repeat the right words happily. " +
   "Show feelings clearly (amazed, happy, curious) so the child enjoys the call.";
 
-function tutorSystem(level: number, topicTitle: string, plan: LessonPlan, kids: boolean, history: ChatMessage[], turnNumber: number) {
+function tutorSystem(level: number, topicTitle: string, plan: LessonPlan, kids: boolean, turnNumber: number) {
   const L = callLevel(level);
-  const next = plan.questions[nextQuestionIndex(history, plan.questions.length)] ?? "";
   return (
     "You are Reppy, a cheerful parrot who is a warm and encouraging English tutor on a phone-English style call with a Korean learner. " +
     "If asked about yourself, you are Reppy the parrot; keep it light and return to the lesson. " +
     `Lesson topic: ${topicTitle}. Lesson goal: ${plan.goal}\n` +
     `Student level ${L.n} (${L.band}). Language rules you must follow in every line: ${L.guide}\n` +
     `Key expressions to use naturally and encourage: ${plan.expressions.map((e) => e.en).join(" | ")}\n` +
-    `Question ideas, in order: ${plan.questions.join(" | ")}\n` +
-    `Progress: the student is giving answer ${Math.min(turnNumber, LESSON_TURNS)} of ${LESSON_TURNS}. ` +
-    (next ? `The next question idea to move on to is: "${next}". ` : "") +
-    "Look at the conversation so far and never ask a question you have already asked, unless you are asking again after an answer that was not a real attempt (on_task false). " +
-    "After a real attempt, always move the conversation forward.\n\n" +
+    `Question ideas (suggestions only, not a script): ${plan.questions.join(" | ")}\n` +
+    `Progress: the student is giving answer ${Math.min(turnNumber, LESSON_TURNS)} of ${LESSON_TURNS}.\n` +
+    "Most important: listen to what the student actually said and build your next question on it. " +
+    "Never ask about something the student has already told you, and never ask anything that contradicts it " +
+    "(for example, if they said it is raining, do not ask whether it is sunny; ask about the rain instead). " +
+    "Skip any question idea that the student already answered or that no longer fits. " +
+    "Never repeat a question you already asked, unless you are asking again after an answer that was not a real attempt (on_task false).\n\n" +
     "How to talk:\n" +
     "- Keep each reply short (1-3 sentences) because it is spoken aloud. One question at a time.\n" +
     "- When the student makes a mistake, do not say they are wrong. Recast it naturally in your reply " +
@@ -162,10 +163,15 @@ function toApiMessages(
     : mustCount
       ? "\n\n[Note to Reppy: the student has already been asked again. Whatever this answer is, accept it warmly and move on to the next question.]"
       : "";
+  // 학생이 이미 한 말을 따로 모아 보여 준다 (다시 묻거나 어긋나는 질문을 하지 않게)
+  const facts = studentFacts(history);
+  const recap = facts.length
+    ? `\n\n[Note to Reppy: the student already told you earlier: ${facts.map((f) => `"${f}"`).join("; ")}. Do not ask about these again or contradict them; build on them and on this new answer.]`
+    : "";
   const again = avoid
     ? `\n\n[Note to Reppy: do not repeat your previous line ("${untag(avoid)}"). React to this answer and say something new.]`
     : "";
-  msgs.push({ role: "user", content: said + note + again });
+  msgs.push({ role: "user", content: said + recap + note + again });
   return msgs;
 }
 
@@ -189,7 +195,7 @@ export async function tutorTurn(args: {
   const out = await parse(
     { userId: args.userId, kind: "turn" },
     TurnSchema,
-    tutorSystem(args.level, args.topicTitle, args.plan, args.kids, history, args.turnNumber),
+    tutorSystem(args.level, args.topicTitle, args.plan, args.kids, args.turnNumber),
     toApiMessages(history, args.said, isLast, args.mustCount, args.avoid),
     800,
   );

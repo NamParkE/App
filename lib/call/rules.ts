@@ -45,10 +45,16 @@ export function withOpening(history: ChatMessage[], opening: string): ChatMessag
   return [{ role: "tutor", text: opening }, ...history];
 }
 
-/** 이번에 이어 갈 질문 순서 (센 대답 수 = 이미 지나간 질문 수) */
-export function nextQuestionIndex(history: ChatMessage[], total: number) {
-  const answered = history.filter((m) => m.role === "user" && m.counted !== false).length;
-  return Math.min(answered, Math.max(0, total - 1));
+/**
+ * 학생이 지금까지 한 말 (대답 수에 넣은 것만, 오래된 것부터). 선생님이 이미 들은 내용을 다시 묻거나
+ * 그 내용과 어긋나는 질문(비가 온다고 했는데 "맑아요?")을 하지 않도록 매 턴 따로 모아 보여 준다.
+ */
+export function studentFacts(history: ChatMessage[], max = 8): string[] {
+  return history
+    .filter((m) => m.role === "user" && m.counted !== false)
+    .map((m) => m.text.replace(/[<>"]/g, " ").replace(/\s+/g, " ").trim().slice(0, 200))
+    .filter(Boolean)
+    .slice(-max);
 }
 
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();

@@ -43,11 +43,17 @@ test("withOpening: 기록이 학생 말로 시작하면 선생님 첫 마디를 
   assert.equal(withOpening(h, "Hi!"), h);
 });
 
-test("nextQuestionIndex: 센 대답 수만큼 질문이 지나간다 (끝을 넘지 않음)", async () => {
-  const { nextQuestionIndex } = await import("./call/rules.ts");
-  assert.equal(nextQuestionIndex([tutor()], 6), 0);
-  assert.equal(nextQuestionIndex([tutor(), user(), tutor(), user(false), tutor()], 6), 1);
-  assert.equal(nextQuestionIndex(Array(20).fill(user()), 6), 5);
+test("studentFacts: 센 학생 대답만, 오래된 것부터, 꺾쇠 · 따옴표는 지운다", async () => {
+  const { studentFacts } = await import("./call/rules.ts");
+  const h: ChatMessage[] = [
+    tutor("How is the weather?"),
+    { role: "user", text: "It is raining", counted: true },
+    tutor("Do you like sun?"),
+    { role: "user", text: "asdf qwer", counted: false },
+    { role: "user", text: 'I like sun more than <rain> "really"', counted: true },
+  ];
+  assert.deepEqual(studentFacts(h), ["It is raining", "I like sun more than rain really"]);
+  assert.equal(studentFacts(Array(12).fill({ role: "user", text: "a" }), 8).length, 8);
 });
 
 test("repeatsLastTutor: 바로 앞 선생님 말과 같은 말인지 (문장부호 · 대소문자 무시)", async () => {
