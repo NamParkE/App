@@ -140,3 +140,12 @@ supabase/migrations/        DB 스키마, 보안 정책, 오픽 주제
 1. Supabase 대시보드 위쪽 **Connect** → **Session pooler**의 연결 문자열을 복사하고, `[YOUR-PASSWORD]` 자리에 DB 비밀번호를 넣습니다 (비밀번호에 `@ : / # ?` 같은 기호가 있으면 접속이 실패할 수 있어, 영문·숫자로 된 비밀번호를 권합니다. Supabase > Project Settings > Database에서 바꿀 수 있습니다). (Direct connection은 GitHub Actions에서 접속되지 않을 수 있어 Session pooler를 씁니다.)
 2. GitHub 저장소 **Settings → Secrets and variables → Actions → New repository secret**에서 이름 `SUPABASE_DB_URL`, 값은 1의 문자열로 저장합니다.
 3. **Actions → DB migrate → Run workflow**를 한 번 누릅니다. 이미 손으로 적용한 `0001`~`0010`은 "적용됨"으로 표시만 하고 다시 실행하지 않습니다.
+
+## 자동 검사 (CI)
+
+`main`에 올라오는 모든 변경은 GitHub Actions의 **CI** 작업이 검사합니다 (Actions 탭).
+
+- **app:** 타입 검사, 단위 테스트(`npm test`), 프로덕션 빌드
+- **db:** 빈 Postgres에 마이그레이션 `0001`부터 끝까지 적용한 뒤 `supabase/tests/`의 테스트를 돌립니다. 사용량 차감 · 영수증 환불, 수업 환불, 내 스크립트 교체(롤백 · 기록 보존), 운영자 권한, 가족 경계(RLS)를 확인합니다.
+
+로컬에서 DB 테스트: `TEST_DATABASE_URL=postgresql://postgres:<비밀번호>@localhost:5432/postgres npm run test:db` (테스트용 Postgres만 넣으세요. 테스트는 새 DB를 만들어 쓰고 지웁니다.)

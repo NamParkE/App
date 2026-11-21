@@ -22,7 +22,8 @@
 - 사용자는 원격 작업 브랜치나 PR 없이 `main`에 바로 푸시하는 방식을 원한다. 작업이 끝나면(기능·UI 변경은 승인 후) 아래 순서로 한다.
   1. 지금 브랜치에서 커밋한다. 클라우드 세션에 작업 브랜치 이름이 정해져 있어도 로컬에서만 쓰고, **원격에 작업 브랜치를 푸시하지 않는다** (만들었다가 지울 브랜치를 남기지 않기 위해서다).
   2. `git fetch origin main` 후 `origin/main`을 머지한다. 다른 세션이 먼저 `main`에 올린 변경이 있을 수 있으니 충돌은 양쪽 기능을 모두 살려서 해결한다.
-  3. 깨끗한 빌드(`rm -rf .next && npm run build`), `npx tsc --noEmit`, `npm test`를 통과시킨다.
+  3. 깨끗한 빌드(`rm -rf .next && npm run build`), `npx tsc --noEmit`, `npm test`를 통과시킨다. `supabase/migrations/`나 `supabase/tests/`를 바꿨다면 `npm run test:db`(테스트용 Postgres 필요)도 통과시킨다. 푸시 뒤에는 GitHub Actions의 "CI"가 같은 검사를 다시 돌린다.
+  - DB 함수나 권한(차감 · 환불 · 운영자 · RLS 등)을 바꾸면 `supabase/tests/`에 테스트를 함께 추가한다.
   4. `git push origin HEAD:main`으로 `main`에 바로 푸시한다. 강제 푸시는 하지 않는다. 푸시가 거절되면(다른 세션이 먼저 올림) 2번부터 다시 한다.
 - PR은 사용자가 요청할 때만 만든다.
 - DB 마이그레이션은 사람이 SQL Editor에 붙여 넣지 않는다. `main`에 `supabase/migrations/` 파일이 올라가면 GitHub Actions("DB migrate", `.github/workflows/db-migrate.yml`)가 운영 DB에 새 파일만 적용한다.
