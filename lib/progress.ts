@@ -20,6 +20,7 @@ export async function allProgress(supabase: DB, userId: string) {
     .from("answer_sets")
     .select("topic_id, level, source, sentences(id, sentence_progress(status))")
     .eq("user_id", userId)
+    .is("archived_at", null) // 교체되어 보관된 내 스크립트는 빼고
     .returns<SetRow[]>();
   return data ?? [];
 }
@@ -61,6 +62,7 @@ export async function topicSets(supabase: DB, userId: string, topicId: string) {
     .select("level, source, sentences(id, position, en, pronunciation, ko, sentence_progress(status))")
     .eq("user_id", userId)
     .eq("topic_id", topicId)
+    .is("archived_at", null) // 교체되어 보관된 내 스크립트는 빼고
     .returns<TopicSetRow[]>();
   return data ?? [];
 }
@@ -92,4 +94,12 @@ export function pickSource(rows: TopicSetRow[], level: Level, asked: AnswerSourc
     if (src && has(src)) return src;
   }
   return preferred;
+}
+
+/** 한 주제의 한 답변(내 스크립트 / 지금 등급의 AI 답변) 진도. 없으면 null */
+export function progressOne(rows: SetRow[], topicId: string, source: AnswerSource, level: Level) {
+  const set = rows.find((r) => r.topic_id === topicId && (source === "mine" ? r.source === "mine" : r.source !== "mine" && r.level === level));
+  if (!set) return null;
+  const p = countDone(set.sentences);
+  return p.total > 0 ? p : null;
 }

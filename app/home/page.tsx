@@ -7,8 +7,8 @@ import { checkProfile, fetchProfile, myStreak, requireUser, todayKst, usageToday
 import { StreakChip } from "@/components/Flame";
 import CallHome, { type CallTopic, type LessonRow } from "./CallHome";
 import HomeModeSwitch, { ModeTabs } from "./ModeSwitch";
-import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
-import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
+import { allProgress, progressFor, progressOne, SENTENCE_COUNT } from "@/lib/progress";
+import { CATEGORIES, one, type AnswerSource, type Category, type Level, type Topic } from "@/lib/types";
 import { closeStale, splitActive, type ActiveLessonRow } from "@/lib/call/server";
 import { adminClient } from "@/lib/supabase/admin";
 
@@ -27,7 +27,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
       usageToday(supabase, userId),
       supabase
         .from("attempts")
-        .select("topic_id, sentences(position)")
+        // 마지막으로 연습한 문장이 어느 답변(내 스크립트 / AI 답변 · 등급)의 몇 번째였는지까지 함께
+        .select("topic_id, sentences(position, answer_sets(source, level, archived_at))")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(1)
@@ -65,7 +66,9 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const progress = progressFor(progressRows, profile.level, profile.opic_source);
 
   const lastTopic = last ? topics?.find((t) => t.id === last.topic_id) : undefined;
-  const lastPos = one<{ position: number }>(last?.sentences)?.position;
+  const lastSentence = one<{ position: number; answer_sets: unknown }>(last?.sentences);
+  const lastPos = lastSentence?.position;
+  const lastSet = one<{ source: AnswerSource; level: Level | null; archived_at: string | null }>(lastSentence?.answer_sets);
   const items: TopicItem[] = (topics ?? []).map((t) => {
     const p = progress.get(t.id);
     return {
@@ -91,12 +94,28 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   );
 
   // "오늘 할 것": 마지막으로 연습한 주제에 외우지 않은 문장이 있으면 그 주제, 아니면 지금 분류에서 처음으로 다 못 외운 주제
+  // "이어서 하기": 마지막으로 연습한 답변(내 스크립트 / AI 답변)의 마지막 문장으로 돌아간다.
+  // 그 답변이 지금도 쓰이는 것(교체되어 보관되지 않았고, AI 답변이면 지금 등급)이고 다 외우지 않았을 때만.
   const lastItem = lastTopic ? items.find((t) => t.id === lastTopic.id) : undefined;
-  const continuing = !!lastItem && lastItem.done < lastItem.total && progress.has(lastItem.id);
+  const lastCurrent =
+    !!lastSet && !lastSet.archived_at && (lastSet.source === "mine" || lastSet.level === profile.level);
+  const lastProgress =
+    lastItem && lastSet && lastCurrent ? progressOne(progressRows, lastItem.id, lastSet.source, profile.level) : null;
+  const continuing = !!lastItem && !!lastProgress && lastProgress.done < lastProgress.total && lastPos !== undefined;
   const todayItem = continuing
     ? lastItem
     : items.find((t) => t.category === category && t.done < t.total) ?? items.find((t) => t.done < t.total);
-  const todayHas = todayItem ? (progress.get(todayItem.id)?.total ?? 0) > 0 : false;
+  const todayHas = continuing || (todayItem ? (progress.get(todayItem.id)?.total ?? 0) > 0 : false);
+  // 카드에 보여 줄 진도: 이어서 하기면 그 답변의 진도
+  const todayDone = continuing && lastProgress ? lastProgress.done : todayItem?.done ?? 0;
+  const todayTotal = continuing && lastProgress ? lastProgress.total : todayItem?.total ?? 0;
+  const todayHref = !todayItem
+    ? "/home"
+    : continuing && lastSet
+      ? `/practice/${todayItem.id}?v=${lastSet.source}&start=${lastPos}`
+      : todayHas
+        ? `/practice/${todayItem.id}`
+        : `/topic/${todayItem.id}`;
   const catLabel = (c: Category) => CATEGORIES.find((x) => x.id === c)?.label ?? "";
 
   const memorizeView = (
@@ -117,21 +136,22 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <section className="hero-card" aria-label="오늘 할 것">
             <span className="sub">
               {continuing ? "이어서 하기" : todayHas ? "다음 주제" : "새 주제"} · {catLabel(todayItem.category)}
+              {continuing && lastSet ? ` · ${lastSet.source === "mine" ? "내 스크립트" : "AI 답변"}` : ""}
             </span>
             <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
               <span style={{ fontSize: 22, fontWeight: 700 }}>{todayItem.title_ko}</span>
               <span className="sub" style={{ fontSize: 14 }}>
                 {todayHas
-                  ? `${todayItem.total}문장 중 ${todayItem.done}문장 외움${continuing && lastPos !== undefined ? ` · 다음은 문장 ${Math.min(lastPos + 2, todayItem.total)}` : ""}`
+                  ? `${todayTotal}문장 중 ${todayDone}문장 외움${continuing && lastPos !== undefined ? ` · 문장 ${lastPos + 1}부터` : ""}`
                   : "답변을 준비하고 연습을 시작해요"}
               </span>
             </div>
             {todayHas && (
               <div className="hero-track">
-                <div style={{ width: `${Math.round((todayItem.done / Math.max(1, todayItem.total)) * 100)}%` }} />
+                <div style={{ width: `${Math.round((todayDone / Math.max(1, todayTotal)) * 100)}%` }} />
               </div>
             )}
-            <Link href={todayHas ? `/practice/${todayItem.id}` : `/topic/${todayItem.id}`} className="btn btn-primary">
+            <Link href={todayHref} className="btn btn-primary">
               <MicIcon size={20} color="#FFFFFF" />
               {continuing ? "이어서 연습" : "연습 시작"}
             </Link>
