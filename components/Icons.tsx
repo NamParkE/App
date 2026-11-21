@@ -138,6 +138,13 @@ export const BulbIcon = ({ size = 16, color = "currentColor" }: P) => (
   </svg>
 );
 
+export const SendIcon = ({ size = 20, color = "currentColor" }: P) => (
+  <svg {...base(size, color)}>
+    <path d="M5 12h13" />
+    <path d="M12 5l7 7-7 7" />
+  </svg>
+);
+
 export const InfoIcon = ({ size = 14, color = "currentColor" }: P) => (
   <svg {...base(size, color)}>
     <circle cx="12" cy="12" r="9" />
