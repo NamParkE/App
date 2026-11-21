@@ -50,6 +50,7 @@ export function progressFor(rows: SetRow[], level: Level, preferred: AnswerSourc
 }
 
 type TopicSetRow = {
+  id: string;
   level: Level | null;
   source: AnswerSource;
   sentences: (Sentence & { sentence_progress: { status: SentenceStatus }[] | null })[] | null;
@@ -59,7 +60,7 @@ type TopicSetRow = {
 export async function topicSets(supabase: DB, userId: string, topicId: string) {
   const { data } = await supabase
     .from("answer_sets")
-    .select("level, source, sentences(id, position, en, pronunciation, ko, sentence_progress(status))")
+    .select("id, level, source, sentences(id, position, en, pronunciation, ko, sentence_progress(status))")
     .eq("user_id", userId)
     .eq("topic_id", topicId)
     .is("archived_at", null) // 교체되어 보관된 내 스크립트는 빼고
@@ -76,7 +77,7 @@ export function sentencesFor(rows: TopicSetRow[], level: Level, source: AnswerSo
     statuses[s.id] = one<{ status: SentenceStatus }>(sentence_progress)?.status ?? "todo";
     return s;
   });
-  return { sentences, statuses };
+  return { sentences, statuses, setId: set?.id ?? null };
 }
 
 /** ?v= 값을 답변 종류로. 이상한 값이면 null */

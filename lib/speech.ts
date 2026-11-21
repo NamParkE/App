@@ -125,6 +125,8 @@ export function listen(handlers: {
   onDone: (text: string) => void;
   onError: (code: string) => void;
   lang?: "en-US" | "ko-KR";
+  /** 효과음 · 시작 지연 없이 (이어 말하기에서 끊긴 인식을 조용히 다시 이을 때) */
+  quiet?: boolean;
 }): Listener | null {
   const Ctor = getCtor();
   if (!Ctor) return null;
@@ -157,11 +159,11 @@ export function listen(handlers: {
   rec.onend = () => {
     setRecording(false);
     if (failed) return;
-    playSfx("recStop");
+    if (!handlers.quiet) playSfx("recStop");
     handlers.onDone([...finals.filter(Boolean), interim.trim()].filter(Boolean).join(" "));
   };
   // 녹음 시작 소리를 먼저 내고, 소리가 끝난 뒤 녹음을 시작한다 (효과음이 마이크에 섞이지 않게)
-  playSfx("recStart");
+  if (!handlers.quiet) playSfx("recStart");
   let started = false;
   let cancelled = false;
   const begin = () => {
@@ -175,7 +177,7 @@ export function listen(handlers: {
       handlers.onError("start-failed");
     }
   };
-  const delay = recStartDelay();
+  const delay = handlers.quiet ? 0 : recStartDelay();
   if (delay) setTimeout(begin, delay);
   else begin();
   return {

@@ -10,6 +10,8 @@ import type { AnswerSource, Level, Sentence, SentenceStatus, Topic } from "@/lib
 export interface AnswerView {
   sentences: Sentence[];
   statuses: Record<string, SentenceStatus>;
+  /** 이 답변의 마지막 이어 말하기 일치도 (없으면 null) */
+  lastRecite?: number | null;
 }
 
 /**
@@ -125,7 +127,9 @@ export default function TopicView({
               <h2 className="section-title" style={{ fontSize: 16 }}>
                 {sentences.length}문장 · 외움 {doneCount}
               </h2>
-              <span className="muted" style={{ fontSize: 12 }}>문장을 누르면 들려요</span>
+              <span className="muted" style={{ fontSize: 12 }}>
+                {allDone && current.lastRecite != null ? `지난 이어 말하기 ${current.lastRecite}%` : "문장을 누르면 들려요"}
+              </span>
             </div>
             <ol style={{ listStyle: "none", margin: 0, padding: 0, display: "flex", flexDirection: "column", gap: 8 }}>
               {sentences.map((s, i) => {
@@ -159,10 +163,21 @@ export default function TopicView({
       </div>
 
       <div className="bottom" style={{ display: "flex", flexDirection: "column", gap: 4, alignItems: "center" }}>
-        {sentences.length > 0 ? (
-          <Link href={`/practice/${topic.id}?v=${view}&start=${allDone ? 0 : startIdx}`} className="btn btn-primary">
+        {allDone ? (
+          <>
+            {/* 다 외웠으면 답변 전체를 가리고 한 번에 말하기 (오픽 준비 고도화 ①) */}
+            <Link href={`/recite/${topic.id}?v=${view}`} className="btn btn-primary">
+              <MicIcon size={20} color="#FFFFFF" />
+              답변 전체 이어 말하기
+            </Link>
+            <Link href={`/practice/${topic.id}?v=${view}&start=0`} className="text-link">
+              문장별로 처음부터 복습하기
+            </Link>
+          </>
+        ) : sentences.length > 0 ? (
+          <Link href={`/practice/${topic.id}?v=${view}&start=${startIdx}`} className="btn btn-primary">
             <MicIcon size={20} color="#FFFFFF" />
-            {allDone ? "처음부터 복습하기" : `문장 ${startIdx + 1}부터 말하기 연습`}
+            {`문장 ${startIdx + 1}부터 말하기 연습`}
           </Link>
         ) : view === "mine" ? (
           <>
