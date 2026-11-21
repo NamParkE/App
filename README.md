@@ -36,6 +36,7 @@
 
 1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 지역은 Northeast Asia (Seoul)를 추천합니다.
 2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql` → `0005_call_exceptions.sql` → `0006_refund_lockdown.sql` → `0007_server_writes.sql` → `0008_admin.sql` → `0009_my_script.sql` → `0010_script_replace_tx.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
+   - 처음 한 번만 이렇게 손으로 적용합니다. 그다음부터는 GitHub Actions가 새 마이그레이션 파일을 자동으로 적용합니다 (아래 "DB 마이그레이션 자동 적용").
 3. 같은 곳에서 관리자(가족 계정을 만들 사람) 이메일을 등록합니다.
    ```sql
    insert into public.owner_emails (email) values ('관리자@gmail.com');
@@ -130,3 +131,12 @@ lib/
   speech.ts                 브라우저 음성 인식과 재생
 supabase/migrations/        DB 스키마, 보안 정책, 오픽 주제
 ```
+
+## DB 마이그레이션 자동 적용
+
+`main`에 `supabase/migrations/` 파일이 바뀌어 올라오면 GitHub Actions의 **DB migrate** 작업이 운영 DB에 새 파일만 적용합니다. 적용한 파일은 운영 DB에 기록되어 두 번 적용되지 않고, 파일 하나가 실패하면 그 파일은 통째로 되돌아갑니다.
+
+처음 한 번 설정:
+1. Supabase 대시보드 위쪽 **Connect** → **Session pooler**의 연결 문자열을 복사하고, `[YOUR-PASSWORD]` 자리에 DB 비밀번호를 넣습니다 (비밀번호에 `@ : / # ?` 같은 기호가 있으면 접속이 실패할 수 있어, 영문·숫자로 된 비밀번호를 권합니다. Supabase > Project Settings > Database에서 바꿀 수 있습니다). (Direct connection은 GitHub Actions에서 접속되지 않을 수 있어 Session pooler를 씁니다.)
+2. GitHub 저장소 **Settings → Secrets and variables → Actions → New repository secret**에서 이름 `SUPABASE_DB_URL`, 값은 1의 문자열로 저장합니다.
+3. **Actions → DB migrate → Run workflow**를 한 번 누릅니다. 이미 손으로 적용한 `0001`~`0010`은 "적용됨"으로 표시만 하고 다시 실행하지 않습니다.
