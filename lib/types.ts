@@ -1,5 +1,7 @@
 export type Level = "IM2" | "IH" | "AL";
 export type Style = "memorize" | "vocab";
+/** 오픽 답변: ai = AI가 만든 답변(등급마다), mine = 내 스크립트(주제마다 하나) */
+export type AnswerSource = "ai" | "mine";
 export type Category = "survey" | "unexpected" | "roleplay";
 export type Mode = "see" | "hide";
 
@@ -13,6 +15,7 @@ export interface Profile {
   setup_done: boolean;
   call_level: number;
   call_level_since: string;
+  opic_source: AnswerSource;
 }
 
 export interface Topic {

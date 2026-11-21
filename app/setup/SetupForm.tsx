@@ -7,13 +7,16 @@ import { createClient } from "@/lib/supabase/client";
 import { BackIcon, CheckIcon, ChatIcon, PhoneIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 import { speak } from "@/lib/speech";
 import { CALL_LEVELS } from "@/lib/call/levels";
-import { LEVELS, type Level, type Profile, type Style } from "@/lib/types";
+import { LEVELS, type AnswerSource, type Level, type Profile, type Style } from "@/lib/types";
 
 export default function SetupForm({ profile }: { profile: Profile }) {
   const router = useRouter();
   const [style, setStyle] = useState<Style>(profile.style);
   const [level, setLevel] = useState<Level>(profile.level);
   const [callLevel, setCallLevel] = useState<number>(profile.call_level);
+  const [source, setSource] = useState<AnswerSource>(profile.opic_source ?? "ai");
+  // 오픽 암기형은 두 단계: 1) 스타일 · 등급 2) 답변 준비 방식 (화면마다 고를 것 하나씩)
+  const [step, setStep] = useState<1 | 2>(1);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -21,7 +24,10 @@ export default function SetupForm({ profile }: { profile: Profile }) {
     setBusy(true);
     setError(null);
     const update: Record<string, unknown> = { style, setup_done: true };
-    if (style === "memorize") update.level = level;
+    if (style === "memorize") {
+      update.level = level;
+      update.opic_source = source;
+    }
     if (style === "vocab" && callLevel !== profile.call_level) {
       update.call_level = callLevel;
       update.call_level_since = new Date().toISOString(); // 레벨 진행(80점 × 3번)은 새 레벨부터 센다
@@ -38,11 +44,60 @@ export default function SetupForm({ profile }: { profile: Profile }) {
 
   const L = CALL_LEVELS[callLevel - 1];
   const cta =
-    style === "vocab"
+    style === "memorize" && step === 1
+      ? "다음"
+      : style === "vocab"
       ? `Lv.${callLevel} ${L.name}(으)로 ${profile.setup_done ? "저장하기" : "시작하기"}`
       : profile.setup_done
         ? "저장하기"
         : "이대로 시작하기";
+
+  if (style === "memorize" && step === 2) {
+    return (
+      <main className="screen">
+        <div className="pad" style={{ gap: 14 }}>
+          <div className="topbar">
+            <button type="button" className="icon-btn" aria-label="뒤로" onClick={() => setStep(1)}>
+              <BackIcon />
+            </button>
+          </div>
+          <div className="muted" style={{ fontSize: 13 }}>오픽 암기형 · 답변 준비</div>
+          <h1 className="title">답변은 어떻게 준비할까요?</h1>
+          <p className="subtitle" style={{ marginTop: -6 }}>나중에 내 정보에서 바꿀 수 있고, 주제마다 둘 다 쓸 수도 있어요.</p>
+          <div role="group" aria-label="답변 준비 방식" style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <button type="button" className="choice" aria-pressed={source === "ai"} onClick={() => { setSource("ai"); playSfx("tap"); }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexGrow: 1 }}>
+                <div className="choice-title">AI가 답변 만들기</div>
+                <div className="choice-desc">목표 등급(<span className="en">{level}</span>)에 맞춘 답변을 주제마다 만들어 드려요.</div>
+              </div>
+              {source === "ai" && <CheckIcon color="var(--accent)" />}
+            </button>
+            <button type="button" className="choice" aria-pressed={source === "mine"} onClick={() => { setSource("mine"); playSfx("tap"); }}>
+              <div style={{ display: "flex", flexDirection: "column", gap: 4, flexGrow: 1 }}>
+                <div className="choice-title">내 스크립트로 연습</div>
+                <div className="choice-desc">학원이나 유튜브에서 받은 답변을 붙여 넣으면, 어색한 문장은 고칠지 물어봐요.</div>
+              </div>
+              {source === "mine" && <CheckIcon color="var(--accent)" />}
+            </button>
+          </div>
+          {error && <p className="error" role="alert">{error}</p>}
+        </div>
+        <div className="bottom">
+          <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
+            {busy ? (
+              <>
+                <SpinnerIcon color="#fff" /> 저장 중…
+              </>
+            ) : profile.setup_done ? (
+              "저장하기"
+            ) : (
+              "이대로 시작하기"
+            )}
+          </button>
+        </div>
+      </main>
+    );
+  }
 
   return (
     <main className="screen">
@@ -130,7 +185,12 @@ export default function SetupForm({ profile }: { profile: Profile }) {
         {error && <p className="error" role="alert">{error}</p>}
       </div>
       <div className="bottom">
-        <button type="button" className="btn btn-primary" onClick={save} disabled={busy}>
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={style === "memorize" ? () => setStep(2) : save}
+          disabled={busy}
+        >
           {busy ? (
             <>
               <SpinnerIcon color="#fff" /> 저장 중…

@@ -1,6 +1,6 @@
 import { notFound, redirect } from "next/navigation";
 import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
-import { sentencesFor, topicSets } from "@/lib/progress";
+import { parseSource, pickSource, sentencesFor, topicSets } from "@/lib/progress";
 import type { Topic } from "@/lib/types";
 import Practice from "./Practice";
 
@@ -9,10 +9,10 @@ export default async function PracticePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ start?: string }>;
+  searchParams: Promise<{ start?: string; v?: string }>;
 }) {
   const { id } = await params;
-  const { start } = await searchParams;
+  const { start, v } = await searchParams;
   const { supabase, userId } = await requireUser();
   const [rawProfile, { data: topic }, sets, used] = await Promise.all([
     fetchProfile(supabase, userId),
@@ -22,12 +22,15 @@ export default async function PracticePage({
   ]);
   const profile = checkProfile(rawProfile);
   if (!topic) notFound();
-  const { sentences, statuses } = sentencesFor(sets, profile.level);
+  // 주소의 ?v= (내 스크립트 mine / AI 답변 ai) 를 따르고, 없으면 기본 방식 쪽
+  const source = pickSource(sets, profile.level, parseSource(v), profile.opic_source);
+  const { sentences, statuses } = sentencesFor(sets, profile.level, source);
   if (sentences.length === 0) redirect(`/topic/${topic.id}`);
   const startIdx = Math.min(Math.max(0, parseInt(start ?? "0", 10) || 0), sentences.length - 1);
   return (
     <Practice
       topic={topic}
+      source={source}
       sentences={sentences}
       initialStatuses={statuses}
       startIdx={startIdx}

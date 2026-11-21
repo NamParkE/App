@@ -26,7 +26,7 @@ export async function POST(request: Request) {
   const [{ data: profile }, { data: topic }, { data: sets }] = await Promise.all([
     supabase.from("profiles").select("id, level").eq("id", userId).maybeSingle<Pick<Profile, "id" | "level">>(),
     supabase.from("topics").select("*").eq("id", topicId).maybeSingle<Topic>(),
-    supabase.from("answer_sets").select("id, level, sentences(id)").eq("user_id", userId).eq("topic_id", topicId),
+    supabase.from("answer_sets").select("id, level, sentences(id)").eq("user_id", userId).eq("topic_id", topicId).eq("source", "ai"),
   ]);
   if (!profile) return fail(403, "가족 초대 코드로 먼저 가입해 주세요.");
   if (!topic) return fail(404, "주제를 찾을 수 없어요.");
@@ -66,6 +66,7 @@ export async function POST(request: Request) {
         .eq("user_id", userId)
         .eq("topic_id", topic.id)
         .eq("level", profile.level)
+        .eq("source", "ai")
         .maybeSingle();
       if (!again) return fail(500, "답변을 저장하지 못했어요.");
       return NextResponse.json({ ok: true });

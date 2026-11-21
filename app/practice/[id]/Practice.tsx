@@ -7,7 +7,7 @@ import { CheckIcon, CloseIcon, MicIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } f
 import { canListen, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
 import RateControl from "@/components/RateControl";
 import type { Token } from "@/lib/diff";
-import type { FeedbackResponse, Mode, Sentence, SentenceStatus, Topic } from "@/lib/types";
+import type { AnswerSource, FeedbackResponse, Mode, Sentence, SentenceStatus, Topic } from "@/lib/types";
 
 type Phase = "ready" | "rec" | "thinking" | "result" | "finished";
 
@@ -44,12 +44,15 @@ function TipText({ text }: { text: string }) {
 
 export default function Practice({
   topic,
+  source,
   sentences,
   initialStatuses,
   startIdx,
   initialUsageLeft,
 }: {
   topic: Topic;
+  /** 연습 중인 답변: 내 스크립트(mine) / AI 답변(ai). 닫으면 같은 답변의 주제 화면으로 돌아간다 */
+  source: AnswerSource;
   sentences: Sentence[];
   initialStatuses: Record<string, SentenceStatus>;
   startIdx: number;
@@ -184,7 +187,7 @@ export default function Practice({
   const progressPct = Math.round(((idx + 1) / total) * 100);
   const header = (
     <div className="topbar" style={{ gap: 12 }}>
-      <Link href={`/topic/${topic.id}`} className="icon-btn" aria-label="연습 닫기">
+      <Link href={`/topic/${topic.id}?v=${source}`} className="icon-btn" aria-label="연습 닫기">
         <CloseIcon />
       </Link>
       <div className="track thick" role="progressbar" aria-valuenow={idx + 1} aria-valuemin={1} aria-valuemax={total}>
@@ -213,7 +216,7 @@ export default function Practice({
           </p>
         </div>
         <div className="bottom btn-row">
-          <Link href={`/topic/${topic.id}`} className="btn btn-outline">문장 목록</Link>
+          <Link href={`/topic/${topic.id}?v=${source}`} className="btn btn-outline">문장 목록</Link>
           <Link href="/home" className="btn btn-primary">다른 주제</Link>
         </div>
       </main>

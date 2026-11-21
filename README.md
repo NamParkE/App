@@ -4,6 +4,7 @@
 학습 스타일은 두 가지입니다.
 
 - **오픽 암기형:** 빈출 주제마다 목표 등급(IM2 / IH / AL)에 맞는 핵심 답변 문장을 만들고, 마이크로 따라 말하면 모범 문장과 비교해 피드백합니다.
+  - **내 스크립트:** AI 답변 대신(또는 함께) 내가 가진 스크립트를 주제마다 붙여 넣어 연습할 수 있습니다. 어색한 문장은 수정안을 보여 주고, 바꿀지는 문장마다 직접 고릅니다 (확인할 때 1회 차감). 설계: [`docs/design/my-script-mode.md`](docs/design/my-script-mode.md)
 - **어휘 확장형 (전화영어):** 레벨 1(아이 수준)~8(원어민)에 맞춰 AI 선생님 Emma와 버튼 방식으로 10분 대화합니다. 수업 뒤 리포트, 교정 노트, 표현장, 복습을 제공합니다.
 
 두 모드 모두 연속 학습일(불꽃)과 가족 주간 순위에 반영됩니다.
@@ -34,7 +35,7 @@
 ### 1. Supabase
 
 1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 지역은 Northeast Asia (Seoul)를 추천합니다.
-2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql` → `0005_call_exceptions.sql` → `0006_refund_lockdown.sql` → `0007_server_writes.sql` → `0008_admin.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
+2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql` → `0005_call_exceptions.sql` → `0006_refund_lockdown.sql` → `0007_server_writes.sql` → `0008_admin.sql` → `0009_my_script.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
 3. 같은 곳에서 관리자(가족 계정을 만들 사람) 이메일을 등록합니다.
    ```sql
    insert into public.owner_emails (email) values ('관리자@gmail.com');

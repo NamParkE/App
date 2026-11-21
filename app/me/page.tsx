@@ -36,7 +36,7 @@ export default async function MePage() {
                 </>
               ) : (
                 <>
-                  오픽 암기형 · 목표 <span className="en">{profile.level}</span> · {levelTitle}
+                  오픽 암기형 · {profile.opic_source === "mine" ? "내 스크립트" : <>목표 <span className="en">{profile.level}</span> · {levelTitle}</>}
                 </>
               )}
             </div>

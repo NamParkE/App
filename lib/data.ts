@@ -6,7 +6,7 @@ import type { Profile } from "./types";
 
 export type DB = Awaited<ReturnType<typeof createClient>>;
 
-const PROFILE_COLUMNS = "id, family_id, display_name, level, style, daily_limit, setup_done, call_level, call_level_since";
+const PROFILE_COLUMNS = "id, family_id, display_name, level, style, daily_limit, setup_done, call_level, call_level_since, opic_source";
 
 /**
  * 로그인한 사용자. getClaims() 는 로그인 토큰을 서버에서 바로 검증해서

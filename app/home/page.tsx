@@ -63,7 +63,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
   const profile = checkProfile(rawProfile);
   const left = Math.max(0, profile.daily_limit - used);
 
-  const progress = progressFor(progressRows, profile.level);
+  const progress = progressFor(progressRows, profile.level, profile.opic_source);
 
   const leftPct = profile.daily_limit ? Math.round((left / profile.daily_limit) * 100) : 0;
   const lastTopic = last ? topics?.find((t) => t.id === last.topic_id) : undefined;

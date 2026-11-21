@@ -1,12 +1,13 @@
 import "server-only";
 import type { DB } from "./data";
-import { one, type Level, type Sentence, type SentenceStatus } from "./types";
+import { one, type AnswerSource, type Level, type Sentence, type SentenceStatus } from "./types";
 
 export const SENTENCE_COUNT: Record<Level, number> = { IM2: 5, IH: 7, AL: 9 };
 
 type SetRow = {
   topic_id: string;
-  level: Level;
+  level: Level | null;
+  source: AnswerSource;
   sentences: { id: string; sentence_progress: { status: SentenceStatus }[] | null }[] | null;
 };
 
@@ -17,43 +18,56 @@ type SetRow = {
 export async function allProgress(supabase: DB, userId: string) {
   const { data } = await supabase
     .from("answer_sets")
-    .select("topic_id, level, sentences(id, sentence_progress(status))")
+    .select("topic_id, level, source, sentences(id, sentence_progress(status))")
     .eq("user_id", userId)
     .returns<SetRow[]>();
   return data ?? [];
 }
 
-/** 특정 등급의 주제별 진도: topic_id → { done, total } */
-export function progressFor(rows: SetRow[], level: Level) {
-  const map = new Map<string, { done: number; total: number }>();
+function countDone(sentences: SetRow["sentences"]) {
+  const list = sentences ?? [];
+  const done = list.filter((x) => one<{ status: SentenceStatus }>(x.sentence_progress)?.status === "memorized").length;
+  return { done, total: list.length };
+}
+
+/**
+ * 주제별 진도: topic_id → { done, total }.
+ * 기본 방식(preferred) 쪽 답변의 진도를 보여 주고, 그쪽이 없으면 다른 쪽을 보여 준다.
+ * AI 답변은 지금 등급의 것만 센다.
+ */
+export function progressFor(rows: SetRow[], level: Level, preferred: AnswerSource = "ai") {
+  const ai = new Map<string, { done: number; total: number }>();
+  const mine = new Map<string, { done: number; total: number }>();
   for (const s of rows) {
-    if (s.level !== level) continue;
-    const sentences = s.sentences ?? [];
-    const done = sentences.filter((x) => one<{ status: SentenceStatus }>(x.sentence_progress)?.status === "memorized").length;
-    map.set(s.topic_id, { done, total: sentences.length });
+    if (s.source === "mine") mine.set(s.topic_id, countDone(s.sentences));
+    else if (s.level === level) ai.set(s.topic_id, countDone(s.sentences));
   }
+  const [first, second] = preferred === "mine" ? [mine, ai] : [ai, mine];
+  const map = new Map(second);
+  for (const [k, v] of first) if (v.total > 0) map.set(k, v);
   return map;
 }
 
 type TopicSetRow = {
-  level: Level;
+  level: Level | null;
+  source: AnswerSource;
   sentences: (Sentence & { sentence_progress: { status: SentenceStatus }[] | null })[] | null;
 };
 
-/** 한 주제의 모든 등급 답변을 한 번에 가져온다 (등급은 나중에 고른다). */
+/** 한 주제의 모든 답변(AI 답변 등급별 + 내 스크립트)을 한 번에 가져온다. */
 export async function topicSets(supabase: DB, userId: string, topicId: string) {
   const { data } = await supabase
     .from("answer_sets")
-    .select("level, sentences(id, position, en, pronunciation, ko, sentence_progress(status))")
+    .select("level, source, sentences(id, position, en, pronunciation, ko, sentence_progress(status))")
     .eq("user_id", userId)
     .eq("topic_id", topicId)
     .returns<TopicSetRow[]>();
   return data ?? [];
 }
 
-/** 그중 내 등급의 문장들과 각 문장의 상태 */
-export function sentencesFor(rows: TopicSetRow[], level: Level) {
-  const set = rows.find((r) => r.level === level);
+/** 그중 한 답변의 문장들과 각 문장의 상태. source 가 ai 면 내 등급의 답변 */
+export function sentencesFor(rows: TopicSetRow[], level: Level, source: AnswerSource = "ai") {
+  const set = rows.find((r) => (source === "mine" ? r.source === "mine" : r.source !== "mine" && r.level === level));
   const raw = (set?.sentences ?? []).slice().sort((a, b) => a.position - b.position);
   const statuses: Record<string, SentenceStatus> = {};
   const sentences: Sentence[] = raw.map(({ sentence_progress, ...s }) => {
@@ -61,4 +75,21 @@ export function sentencesFor(rows: TopicSetRow[], level: Level) {
     return s;
   });
   return { sentences, statuses };
+}
+
+/** ?v= 값을 답변 종류로. 이상한 값이면 null */
+export function parseSource(v: string | undefined): AnswerSource | null {
+  return v === "mine" || v === "ai" ? v : null;
+}
+
+/**
+ * 어느 답변을 보여 줄지 정한다: 주소의 ?v= → 기본 방식 → 다른 쪽 순서로, 문장이 있는 쪽.
+ * 둘 다 없으면 기본 방식.
+ */
+export function pickSource(rows: TopicSetRow[], level: Level, asked: AnswerSource | null, preferred: AnswerSource): AnswerSource {
+  const has = (src: AnswerSource) => sentencesFor(rows, level, src).sentences.length > 0;
+  for (const src of [asked, preferred, preferred === "ai" ? "mine" : "ai"] as (AnswerSource | null)[]) {
+    if (src && has(src)) return src;
+  }
+  return preferred;
 }
