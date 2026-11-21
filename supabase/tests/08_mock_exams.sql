@@ -96,3 +96,13 @@ select test.ok((select count(*) from mock_limit_changes where user_id = :'U') = 
 -- 비용 기록에 모의고사 리포트 종류
 insert into ai_calls (user_id, kind, model) values (:'U', 'mock', 'claude-sonnet-5-5');
 select test.ok(true, 'AI 비용 기록에 모의고사 리포트(mock) 종류');
+
+-- 다른 사람의 이번 달 횟수는 직접 볼 수 없다 (0014)
+select set_config('request.jwt.claim.sub', :'W', true);
+set local role authenticated;
+do $$ begin
+  perform mock_used_this_month('00000000-0000-0000-0000-00000000000a');
+  raise exception 'TEST FAILED: 다른 사람의 횟수를 봄';
+exception when insufficient_privilege then raise notice 'ok - 다른 사람의 이번 달 모의고사 횟수는 볼 수 없다';
+end $$;
+reset role;
