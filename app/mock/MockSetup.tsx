@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { BackIcon, SpinnerIcon } from "@/components/Icons";
+import { useBackOverride } from "@/lib/back";
 import { MOCK_COUNT, SELF_LEVELS, SELF_RECOMMEND } from "@/lib/mock";
 import { ACTIVITY_GROUPS, JOBS, LIVING, MIN_ACTIVITIES, STUDENT, validSurvey, type Survey } from "@/lib/mockBank";
 import type { Level } from "@/lib/types";
@@ -47,6 +48,9 @@ export default function MockSetup({
     else if (step === "level") setStep("activities");
     else if (SURVEY_STEPS.includes(step)) setStep(SURVEY_STEPS[SURVEY_STEPS.indexOf(step) - 1]);
   };
+
+  // 설문 · 난이도 단계에서 휴대폰 뒤로가기 = 화면의 ← (이전 단계)
+  useBackOverride(step !== "intro", () => back());
 
   async function start() {
     if (self === null || !validSurvey(survey)) return;

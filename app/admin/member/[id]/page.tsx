@@ -6,6 +6,7 @@ import { rate, requireOperator, weekdayKo, type MemberDetail } from "@/lib/admin
 import { formatKrw, toKrw } from "@/lib/pricing";
 import LimitForm from "./LimitForm";
 import MockLimitForm from "./MockLimitForm";
+import { BackTo } from "@/components/AppBack";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -55,6 +56,7 @@ export default async function AdminMemberPage({ params }: { params: Promise<{ id
           </div>
         </div>
 
+        <BackTo href={`/admin/family/${m.family_id}`} />
         <LimitForm key={m.daily_limit} userId={m.user_id} initialLimit={m.daily_limit} usedToday={m.used_today} wonPerUse={wonPerUse} />
         {m.last_change && (
           <p className="muted" style={{ margin: "-8px 4px 0", fontSize: 12 }}>

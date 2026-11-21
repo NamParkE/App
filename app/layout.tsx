@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import ServiceWorker from "@/components/ServiceWorker";
+import AppBack from "@/components/AppBack";
 
 export const metadata: Metadata = {
   title: "오픽 암기",
@@ -21,6 +22,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body>
         {children}
         <ServiceWorker />
+        <AppBack />
       </body>
     </html>
   );

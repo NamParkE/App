@@ -5,6 +5,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CloseIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 import { canListen, canSpeak, speak, stopSpeaking } from "@/lib/speech";
 import { useLongListen } from "@/lib/useLongListen";
+import { useBackOverride } from "@/lib/back";
 import { clock, MOCK_ADJUST_AFTER, MOCK_COUNT, MOCK_REPLAYS, type MockAnswer } from "@/lib/mock";
 import type { Adjust, MockQuestions } from "@/lib/mockBank";
 
@@ -43,6 +44,9 @@ export default function MockExam({
   const answerStart = useRef(0);
   const answers = useRef<MockAnswer[]>([]);
   const finishing = useRef(false);
+
+  // 시험 중 휴대폰 뒤로가기: 바로 나가지 않고 "시험을 그만둘까요?" (창이 열려 있으면 닫는다)
+  useBackOverride(stage !== "finishing", () => setExit((e) => !e));
 
   const list = [...questions.first, ...(adjusted ? questions.rest[adjusted] : [])];
   const q = list[idx];

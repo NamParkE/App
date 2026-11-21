@@ -3,6 +3,7 @@
 import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useBackOverride } from "@/lib/back";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { canListen, getSavedRate, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
@@ -135,6 +136,13 @@ export default function CallSession({
       if (confirmTimer.current) clearTimeout(confirmTimer.current);
     };
   }, []);
+
+  // 통화 중 휴대폰 뒤로가기: 바로 나가지 않고 "통화를 끝낼까요?" (열린 창이 있으면 그 창을 닫는다)
+  useBackOverride(phase === "call", () => {
+    if (confirmEnd) setConfirmEnd(false);
+    else if (helpOpen) setHelpOpen(false);
+    else setConfirmEnd(true);
+  });
 
   // 통화 시간
   useEffect(() => {
@@ -837,11 +845,17 @@ export default function CallSession({
             <div className="sheet" role="dialog" aria-modal="true" aria-label="통화를 끝낼까요" onClick={(e) => e.stopPropagation()}>
               <h2 className="section-title" style={{ fontSize: 20 }}>통화를 끝낼까요?</h2>
               <div className="card" style={{ fontSize: 14, lineHeight: 1.5 }}>
-                <div>
-                  <b>대답 {MIN_TURNS_FOR_REPORT}번</b>부터 리포트와 연속 학습일이 생겨요. 지금은 <b>{turns}번</b>이라 리포트 없이 끝나요.
-                </div>
+                {turns >= MIN_TURNS_FOR_REPORT ? (
+                  <div>
+                    지금 끝내면 <b>대답 {turns}번</b>까지로 리포트를 만들어요.
+                  </div>
+                ) : (
+                  <div>
+                    <b>대답 {MIN_TURNS_FOR_REPORT}번</b>부터 리포트와 연속 학습일이 생겨요. 지금은 <b>{turns}번</b>이라 리포트 없이 끝나요.
+                  </div>
+                )}
               </div>
-              {turns === 0 ? (
+              {turns >= MIN_TURNS_FOR_REPORT ? null : turns === 0 ? (
                 <div className="refund-note ok">
                   <CheckIcon size={18} color="var(--ok-ink)" /> 아직 대답을 안 해서 오늘 연습 {LESSON_USAGE_COST}회를 돌려드려요
                 </div>
