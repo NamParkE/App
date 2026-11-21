@@ -1,13 +1,12 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import { StreakChip } from "@/components/Flame";
-import { ChevronIcon, PhoneIcon, ReplayIcon } from "@/components/Icons";
-import { callLevel, LESSON_USAGE_COST, LEVEL_UP_COUNT, LEVEL_UP_SCORE, RESUME_MINUTES } from "@/lib/call/levels";
+import { ChevronIcon } from "@/components/Icons";
+import { LESSON_USAGE_COST, LEVEL_UP_COUNT, LEVEL_UP_SCORE, RESUME_MINUTES } from "@/lib/call/levels";
 import type { ActiveLessonRow } from "@/lib/call/rules";
 import type { Profile } from "@/lib/types";
-import TopicPicker from "./TopicPicker";
+import TodayLesson from "./TopicPicker";
 import { ModeTabs } from "./ModeSwitch";
-import HomeReppy from "./HomeReppy";
 import ResumeCard from "./ResumeCard";
 
 export interface CallTopic {
@@ -53,7 +52,6 @@ export default function CallHome({
   resumable: ActiveLessonRow | null;
 }) {
   const level = profile.call_level;
-  const L = callLevel(level);
   const forLevel = topics.filter((t) => level >= t.level_min && level <= t.level_max);
 
   // 다음 주제: 서버(/api/call/start)와 같은 규칙. 안 한 주제를 순서대로, 다 했으면 가장 오래전에 한 것
@@ -76,45 +74,19 @@ export default function CallHome({
   return (
     <main className="screen">
       <div className="pad">
+        <ModeTabs />
         <div className="row" style={{ alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div className="muted" style={{ fontSize: 14 }}>{profile.display_name}님, 오늘도 한 통화</div>
-            <h1 className="sr-only">전화영어</h1>
-            <ModeTabs badge={`Lv.${level}`} />
+            <div className="muted" style={{ fontSize: 13 }}>{profile.display_name}님, 오늘도 한 통화</div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
+              오늘의 통화 <span className="en" style={{ fontSize: 14, color: "var(--accent)" }}>Lv.{level}</span>
+            </h1>
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
 
-        <HomeReppy streak={streak.streak} studiedToday={streak.studiedToday} mode="vocab" />
-
-        <section className="card" aria-label="내 레벨">
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span className="level-tag en">Lv.{level}</span>
-            <div style={{ fontSize: 16, fontWeight: 700, flexGrow: 1 }}>
-              {L.name} <span className="muted" style={{ fontSize: 13, fontWeight: 400 }}>{L.band}</span>
-            </div>
-            <Link href="/setup" className="chip">바꾸기</Link>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <div className="segments light" role="img" aria-label={`${LEVEL_UP_SCORE}점 이상 수업 ${good}/${LEVEL_UP_COUNT}`}>
-              {Array.from({ length: LEVEL_UP_COUNT }, (_, i) => (
-                <div key={i} className={i < good ? "on" : undefined} />
-              ))}
-            </div>
-            <div className="muted" style={{ fontSize: 13, whiteSpace: "nowrap" }}>
-              {LEVEL_UP_SCORE}점 이상 <b className="en" style={{ color: "var(--ink)" }}>{good}/{LEVEL_UP_COUNT}</b>
-            </div>
-          </div>
-          <div className="muted" style={{ fontSize: 13 }}>
-            {level >= 8
-              ? "최고 레벨이에요. 원어민처럼 대화해 봐요!"
-              : good >= LEVEL_UP_COUNT
-                ? `Lv.${level + 1} 도전을 권해요. 위의 바꾸기에서 올릴 수 있어요.`
-                : `${LEVEL_UP_COUNT - good}번 더 ${LEVEL_UP_SCORE}점을 넘으면 Lv.${level + 1} 도전을 권해 드려요`}
-          </div>
-        </section>
-
-        {resumable && (
+        {/* 끊긴 통화가 있으면 그 자리에 "이어서 통화"가 대신 나온다 (큰 버튼은 하나) */}
+        {resumable ? (
           <ResumeCard
             lessonId={resumable.id}
             title={titleOf.get(resumable.topic_id) ?? resumable.topic_id}
@@ -122,57 +94,66 @@ export default function CallHome({
             minutesAgo={minutesAgo}
             minutesLeft={Math.max(1, RESUME_MINUTES - minutesAgo)}
           />
+        ) : (
+          next && (
+            <TodayLesson
+              topics={forLevel.map((t) => ({ id: t.id, title_ko: t.title_ko, title_en: t.title_en, done: lastDone.has(t.id) }))}
+              initialId={next.id}
+              canStart={canStart}
+              cost={LESSON_USAGE_COST}
+              usageNote={
+                canStart
+                  ? `오늘 ${usageLeft}회 남음`
+                  : `오늘 남은 연습이 ${usageLeft}회예요. 수업은 ${LESSON_USAGE_COST}회가 필요해서 내일 다시 할 수 있어요.`
+              }
+            />
+          )
         )}
 
-        {next && (
-          <section className="usage" aria-label="오늘의 수업" style={resumable ? { opacity: 0.55 } : undefined}>
-            <div className="row" style={{ alignItems: "center" }}>
-              <div style={{ fontSize: 13, color: "var(--dark-muted)" }}>오늘의 수업 · 약 10분</div>
-              <TopicPicker topics={forLevel.map((t) => ({ id: t.id, title_ko: t.title_ko, title_en: t.title_en, done: lastDone.has(t.id) }))} />
-            </div>
-            <div style={{ fontSize: 20, fontWeight: 700 }}>{next.title_ko}</div>
-            <div className="en" style={{ fontSize: 13, color: "var(--dark-muted)" }}>{next.title_en}</div>
-            {resumable ? (
-              <div style={{ fontSize: 14, color: "var(--dark-muted)" }}>끊긴 통화를 이어서 마치거나 그만두면 시작할 수 있어요</div>
-            ) : canStart ? (
-              <Link href={`/call?topic=${next.id}`} className="btn btn-primary" style={{ height: 52 }}>
-                <PhoneIcon color="#FFFFFF" />
-                수업 시작 <span style={{ fontWeight: 500, fontSize: 13 }}>(사용량 {LESSON_USAGE_COST}회)</span>
-              </Link>
+        <section aria-label="내 레벨" className="level-line">
+          <span className="muted" style={{ fontSize: 13, flexGrow: 1 }}>
+            {level >= 8 ? (
+              "최고 레벨이에요. 원어민처럼 대화해 봐요!"
+            ) : good >= LEVEL_UP_COUNT ? (
+              <>
+                <b style={{ color: "var(--ink)" }}>Lv.{level + 1} 도전</b>을 권해요 ·{" "}
+                <Link href="/setup" style={{ color: "var(--accent-ink)" }}>레벨 바꾸기</Link>
+              </>
             ) : (
-              <div style={{ fontSize: 14, color: "var(--dark-muted)" }}>
-                오늘 남은 연습이 {usageLeft}회예요. 수업은 {LESSON_USAGE_COST}회가 필요해서 내일 다시 할 수 있어요.
-              </div>
+              <>
+                Lv.{level + 1}까지 <b style={{ color: "var(--ink)" }}>{LEVEL_UP_SCORE}점 이상 {LEVEL_UP_COUNT - good}번 더</b>
+              </>
             )}
-          </section>
-        )}
-
-        <Link href="/phrasebook" className="card continue">
-          <div className="play" style={{ background: "var(--accent-soft)" }}>
-            <ReplayIcon size={20} color="var(--accent-ink)" />
-          </div>
-          <div style={{ display: "flex", flexDirection: "column", gap: 2, flexGrow: 1 }}>
-            <div style={{ fontSize: 15, fontWeight: 700 }}>{dueCount > 0 ? `복습할 표현 ${dueCount}개` : "표현장"}</div>
-            <div className="muted" style={{ fontSize: 13 }}>
-              {dueCount > 0 ? "수업 시작 전에도 자동으로 복습해요" : "수업에서 배운 표현이 모여요"}
-            </div>
-          </div>
-          <ChevronIcon />
-        </Link>
-
-        {recent.length > 0 && (
-          <section style={{ display: "flex", flexDirection: "column", gap: 8 }} aria-label="최근 수업">
-            <h2 className="section-title" style={{ fontSize: 15 }}>최근 수업</h2>
-            {recent.map((l) => (
-              <div key={l.id} className="row" style={{ fontSize: 14 }}>
-                <span>
-                  {titleOf.get(l.topic_id) ?? l.topic_id} <span className="muted" style={{ fontSize: 12 }}>{ago(l.started_at)} · Lv.{l.level}</span>
-                </span>
-                <b className="en">{l.score}점</b>
-              </div>
+          </span>
+          <span className="level-dots" role="img" aria-label={`${LEVEL_UP_SCORE}점 이상 수업 ${good}/${LEVEL_UP_COUNT}`}>
+            {Array.from({ length: LEVEL_UP_COUNT }, (_, i) => (
+              <span key={i} className={i < good ? "on" : undefined} />
             ))}
-          </section>
-        )}
+          </span>
+        </section>
+
+        <div className="adm-list">
+          <Link href="/phrasebook" className="adm-item" style={{ flexDirection: "row", alignItems: "center" }}>
+            <span style={{ flexGrow: 1, fontSize: 15 }}>
+              {dueCount > 0 ? (
+                <>
+                  복습할 표현 <b>{dueCount}개</b>
+                </>
+              ) : (
+                "표현장"
+              )}
+            </span>
+            <ChevronIcon size={18} />
+          </Link>
+          {recent.map((l) => (
+            <div key={l.id} className="adm-item" style={{ flexDirection: "row", alignItems: "center", fontSize: 14 }}>
+              <span style={{ flexGrow: 1 }}>
+                {titleOf.get(l.topic_id) ?? l.topic_id} <span className="muted" style={{ fontSize: 12 }}>{ago(l.started_at)} · Lv.{l.level}</span>
+              </span>
+              <b className="en">{l.score}점</b>
+            </div>
+          ))}
+        </div>
       </div>
       <BottomNav current="/home" />
     </main>

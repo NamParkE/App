@@ -26,7 +26,9 @@ export default async function PracticePage({
   const source = pickSource(sets, profile.level, parseSource(v), profile.opic_source);
   const { sentences, statuses } = sentencesFor(sets, profile.level, source);
   if (sentences.length === 0) redirect(`/topic/${topic.id}`);
-  const startIdx = Math.min(Math.max(0, parseInt(start ?? "0", 10) || 0), sentences.length - 1);
+  // ?start= 가 없으면 아직 못 외운 첫 문장부터 (홈의 "이어서 연습")
+  const firstTodo = Math.max(0, sentences.findIndex((s) => statuses[s.id] !== "memorized"));
+  const startIdx = Math.min(Math.max(0, start === undefined ? firstTodo : parseInt(start, 10) || 0), sentences.length - 1);
   return (
     <Practice
       topic={topic}

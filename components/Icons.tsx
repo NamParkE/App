@@ -151,3 +151,25 @@ export const InfoIcon = ({ size = 14, color = "currentColor" }: P) => (
     <path d="M12 8v4M12 16h.01" />
   </svg>
 );
+
+export const ListIcon = ({ size = 20, color = "currentColor" }: P) => (
+  <svg {...base(size, color)}>
+    <path d="M4 6h16M4 12h16M4 18h10" />
+  </svg>
+);
+
+export const SlidersIcon = ({ size = 22, color = "currentColor" }: P) => (
+  <svg {...base(size, color)}>
+    <path d="M4 7h10M18 7h2M4 17h4M12 17h8" />
+    <circle cx="16" cy="7" r="2" />
+    <circle cx="10" cy="17" r="2" />
+  </svg>
+);
+
+export const HelpIcon = ({ size = 20, color = "currentColor" }: P) => (
+  <svg {...base(size, color)}>
+    <circle cx="12" cy="12" r="9" />
+    <path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .8-1 1.5V14" />
+    <path d="M12 17h.01" />
+  </svg>
+);

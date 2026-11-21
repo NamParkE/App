@@ -32,8 +32,8 @@ export default function TopicBrowser({ items, initialCat }: { items: TopicItem[]
 
   return (
     <>
-      <div className="row" style={{ alignItems: "center", marginTop: 4, flexWrap: "wrap" }}>
-        <h2 className="section-title">빈출 주제</h2>
+      <div className="row" style={{ alignItems: "center", marginTop: 4, flexWrap: "wrap", scrollMarginTop: 16 }} id="topics">
+        <h2 className="section-title" style={{ fontSize: 15 }}>주제 목록 · 눌러서 바로 연습</h2>
         <div style={{ display: "flex", gap: 6 }} role="group" aria-label="주제 분류">
           {CATEGORIES.map((c) => (
             <button

@@ -23,7 +23,7 @@ import RateControl from "@/components/RateControl";
 import Flame, { flameBadge } from "@/components/Flame";
 import Reppy, { type ReppyMood } from "@/components/Reppy";
 import { KidsCall, KidsReport } from "./KidsView";
-import { BulbIcon, CheckIcon, CloseIcon, InfoIcon, MicIcon, PhoneIcon, ReplayIcon, SendIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
+import { BulbIcon, CheckIcon, CloseIcon, HelpIcon, InfoIcon, MicIcon, PhoneIcon, ReplayIcon, SendIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 
 const SCREEN_KEY = "callScreen";
 
@@ -97,6 +97,8 @@ export default function CallSession({
   /** 지금 듣는 말이 한국어(한국어로 묻기)인지 */
   const [listenKo, setListenKo] = useState(false);
   const [confirmEnd, setConfirmEnd] = useState(false);
+  // 도움 4가지(다시 듣기 · 천천히 · 대답 예시 · 한국어로 묻기)는 "도움" 버튼 하나 뒤의 시트로
+  const [helpOpen, setHelpOpen] = useState(false);
   /** 방금 대답을 세지 않았을 때의 안내 */
   const [skipNote, setSkipNote] = useState(false);
   const [callError, setCallError] = useState<string | null>(null);
@@ -400,8 +402,15 @@ export default function CallSession({
   const lastTutor = [...messages].reverse().find((m) => m.role === "tutor");
   const headMood: ReppyMood = speakingId !== null ? "talk" : mic === "waiting" || phase === "ending" ? "think" : "idle";
 
-  function toggle(id: number, key: "showText" | "showKo") {
-    setMessages((list) => list.map((m) => (m.id === id ? { ...m, [key]: !m[key] } : m)));
+  /** 자막과 한글 뜻을 함께 켜고 끈다 */
+  function toggleSub(id: number) {
+    setMessages((list) =>
+      list.map((m) => {
+        if (m.id !== id) return m;
+        const on = m.showText && (m.showKo || !m.ko);
+        return { ...m, showText: !on, showKo: !on };
+      }),
+    );
   }
 
   async function changeLevel(to: number) {
@@ -526,7 +535,7 @@ export default function CallSession({
           </section>
           <RateControl />
           <p className="muted" style={{ fontSize: 13, margin: 0, lineHeight: 1.5 }}>
-            리피 말이 끝나면 마이크 버튼을 누르고 대답하세요. 막히면 힌트를 눌러도 돼요.
+            리피 말이 끝나면 마이크 버튼을 누르고 대답하세요. 막히면 왼쪽 아래 "도움"을 누르세요.
           </p>
         </div>
         <div className="bottom">
@@ -599,28 +608,27 @@ export default function CallSession({
           {messages.map((m) =>
             m.role === "tutor" ? (
               <div key={m.id} className={`msg tutor${speakingId === m.id ? " speaking" : ""}`}>
-                <div className="msg-bubble">
+                {/* 말풍선을 누르면 다시 듣기 */}
+                <button type="button" className="msg-bubble bubble-btn" onClick={() => sayTutor(m)} aria-label="리피 말 다시 듣기">
                   {speakingId === m.id && (
-                    <div className="speaking-label">
+                    <span className="speaking-label">
                       <SpeakerIcon size={14} /> 말하는 중
-                    </div>
+                    </span>
                   )}
                   {m.showText ? (
-                    <div className="en" lang="en">{m.text}</div>
+                    <span className="en" lang="en">{m.text}</span>
                   ) : (
-                    <div className="hidden-lines" aria-label="자막이 가려져 있어요">
-                      <div style={{ width: "92%" }} />
-                      <div style={{ width: "64%" }} />
-                    </div>
+                    <span className="hidden-lines" aria-label="자막이 가려져 있어요">
+                      <span style={{ width: "92%" }} />
+                      <span style={{ width: "64%" }} />
+                    </span>
                   )}
-                  {m.showKo && m.ko && <div className="ko-line" style={{ fontSize: 14 }}>{m.ko}</div>}
-                  <div className="msg-tools">
-                    <button type="button" onClick={() => toggle(m.id, "showText")}>{m.showText ? "자막 숨기기" : "자막 보기"}</button>
-                    {m.ko && <button type="button" onClick={() => toggle(m.id, "showKo")}>{m.showKo ? "뜻 숨기기" : "한글 뜻"}</button>}
-                    <button type="button" aria-label="다시 듣기" onClick={() => sayTutor(m)}>
-                      <SpeakerIcon size={14} />
-                    </button>
-                  </div>
+                  {m.showKo && m.ko && <span className="ko-line" style={{ fontSize: 14 }}>{m.ko}</span>}
+                </button>
+                <div className="msg-tools">
+                  <button type="button" onClick={() => toggleSub(m.id)}>
+                    {m.showText && (m.showKo || !m.ko) ? "자막 · 뜻 숨기기" : "자막 · 뜻 보기"}
+                  </button>
                 </div>
                 {m.correction && (
                   <div className="fix-chip">
@@ -723,34 +731,16 @@ export default function CallSession({
         </div>
 
         <div className="call-controls">
-          <div className="help-row">
-            <button type="button" onClick={() => lastTutor && sayTutor(lastTutor)} disabled={!lastTutor || phase === "ending"}>
-              <ReplayIcon size={16} /> 다시 듣기
-            </button>
+          <div className="mic-row">
             <button
               type="button"
-              onClick={() => {
-                if (!lastTutor) return;
-                setSpeakingId(lastTutor.id);
-                speak(lastTutor.text, { rate: 0.6, onEnd: () => setSpeakingId(null) });
-              }}
-              disabled={!lastTutor || phase === "ending"}
+              className="help-btn"
+              onClick={() => setHelpOpen(true)}
+              disabled={phase === "ending" || mic === "rec" || mic === "waiting"}
+              aria-haspopup="dialog"
             >
-              천천히 <span className="en muted">0.6×</span>
+              <HelpIcon size={18} /> 도움
             </button>
-            <button type="button" onClick={() => void askHint()} disabled={hintBusy || hintsLeft <= 0 || mic !== "idle" || phase === "ending"}>
-              {hintBusy ? <SpinnerIcon size={16} /> : <BulbIcon />} 힌트 <span className="en muted">{hintsLeft}</span>
-            </button>
-            <button
-              type="button"
-              className="sos-btn"
-              aria-label={`한국어로 묻기, ${sosLeft}번 남음`}
-              onClick={() => onMic(true)}
-              disabled={sosBusy || sosLeft <= 0 || mic !== "idle" || phase === "ending" || !listenOk}
-            >
-              {sosBusy ? <SpinnerIcon size={16} /> : null} 한국어로 <span className="en muted">{sosLeft}</span>
-            </button>
-          </div>
           <button
             type="button"
             className={`mic${mic === "rec" ? " rec" : ""}${mic === "waiting" ? " thinking" : ""}`}
@@ -768,6 +758,8 @@ export default function CallSession({
               <MicIcon size={34} color="#FFFFFF" />
             )}
           </button>
+            <span />
+          </div>
           <div className="muted" style={{ fontSize: 13 }}>
             {!listenOk
               ? "이 브라우저는 음성 인식을 지원하지 않아요. 크롬에서 열어 주세요."
@@ -782,6 +774,64 @@ export default function CallSession({
                   : "리피 말이 끝나면 버튼을 누르고 대답하세요"}
           </div>
         </div>
+        {helpOpen && (
+          <div className="sheet-backdrop" onClick={() => setHelpOpen(false)}>
+            <div className="sheet" role="dialog" aria-modal="true" aria-label="도움" onClick={(e) => e.stopPropagation()}>
+              <h2 className="section-title">어떤 도움이 필요해요?</h2>
+              <div className="help-list">
+                <button
+                  type="button"
+                  disabled={!lastTutor}
+                  onClick={() => {
+                    setHelpOpen(false);
+                    if (lastTutor) sayTutor(lastTutor);
+                  }}
+                >
+                  <span>다시 듣기</span>
+                  <span className="muted">리피 말을 한 번 더</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={!lastTutor}
+                  onClick={() => {
+                    setHelpOpen(false);
+                    if (!lastTutor) return;
+                    setSpeakingId(lastTutor.id);
+                    speak(lastTutor.text, { rate: 0.6, onEnd: () => setSpeakingId(null) });
+                  }}
+                >
+                  <span>천천히 듣기</span>
+                  <span className="muted en">0.6×</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={hintBusy || hintsLeft <= 0 || mic !== "idle"}
+                  onClick={() => {
+                    setHelpOpen(false);
+                    void askHint();
+                  }}
+                >
+                  <span>대답 예시 보기</span>
+                  <span className="muted">{hintsLeft > 0 ? `${hintsLeft}번 남음` : "다 썼어요"}</span>
+                </button>
+                <button
+                  type="button"
+                  disabled={sosBusy || sosLeft <= 0 || mic !== "idle" || !listenOk}
+                  onClick={() => {
+                    setHelpOpen(false);
+                    onMic(true);
+                  }}
+                >
+                  <span>한국어로 묻기</span>
+                  <span className="muted">{sosLeft > 0 ? `${sosLeft}번 남음` : "다 썼어요"}</span>
+                </button>
+              </div>
+              <button type="button" className="text-link" onClick={() => setHelpOpen(false)}>
+                닫기
+              </button>
+            </div>
+          </div>
+        )}
         {confirmEnd && (
           <div className="sheet-backdrop" onClick={() => setConfirmEnd(false)}>
             <div className="sheet" role="dialog" aria-modal="true" aria-label="통화를 끝낼까요" onClick={(e) => e.stopPropagation()}>
@@ -978,12 +1028,8 @@ export default function CallSession({
             </>
           )}
         </div>
-        <div className="bottom btn-row">
-          {r && (
-            <button type="button" className="btn btn-outline" onClick={() => setShowTranscript((v) => !v)}>
-              {showTranscript ? "대화 접기" : "대화 다시 보기"}
-            </button>
-          )}
+        {/* 큰 버튼은 "완료" 하나, 대화 다시 보기는 작은 링크 */}
+        <div className="bottom" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
           <button
             type="button"
             className="btn btn-primary"
@@ -994,6 +1040,11 @@ export default function CallSession({
           >
             완료
           </button>
+          {r && (
+            <button type="button" className="text-link" onClick={() => setShowTranscript((v) => !v)}>
+              {showTranscript ? "대화 접기" : "대화 다시 보기"}
+            </button>
+          )}
         </div>
 
         {showCelebration && result.milestone && (

@@ -3,7 +3,7 @@
 import { playSfx } from "@/lib/sfx";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { CheckIcon, CloseIcon, MicIcon, ReplayIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
+import { CheckIcon, ChevronIcon, CloseIcon, MicIcon, ReplayIcon, SlidersIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 import { canListen, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
 import RateControl from "@/components/RateControl";
 import type { Token } from "@/lib/diff";
@@ -11,7 +11,11 @@ import type { AnswerSource, FeedbackResponse, Mode, Sentence, SentenceStatus, To
 
 type Phase = "ready" | "rec" | "thinking" | "result" | "finished";
 
-const MODE_KEY = "practiceMode";
+// "처음부터 가리고 말하기" 설정 (기기에 저장). 예전 "practiceMode = hide" 도 같은 뜻으로 읽는다.
+const HIDE_FIRST_KEY = "practiceHideFirst";
+const OLD_MODE_KEY = "practiceMode";
+/** 보면서 말하기에서 이 점수 이상이면 그 문장의 다음 시도는 자동으로 가리고 말하기 */
+const STEP_UP_SCORE = 90;
 
 const MIC_ERRORS: Record<string, string> = {
   "not-allowed": "마이크 권한이 꺼져 있어요. 브라우저 설정에서 이 사이트의 마이크를 허용해 주세요.",
@@ -59,7 +63,10 @@ export default function Practice({
   initialUsageLeft: number;
 }) {
   const [idx, setIdx] = useState(startIdx);
-  const [mode, setMode] = useState<Mode>("see");
+  const [hideFirst, setHideFirst] = useState(false);
+  // 보면서 말하기를 통과한 문장 (다음 시도는 가리고 말하기)
+  const [passedSee, setPassedSee] = useState<Record<string, boolean>>({});
+  const [sheet, setSheet] = useState(false);
   const [phase, setPhase] = useState<Phase>("ready");
   const [partial, setPartial] = useState("");
   const [typed, setTyped] = useState("");
@@ -73,11 +80,13 @@ export default function Practice({
 
   const sentence = sentences[idx];
   const total = sentences.length;
+  // 1 보면서 → 2 가리고: 앱이 단계를 정한다 (외운 문장 · 통과한 문장 · "처음부터 가리고" 설정이면 가리고)
+  const mode: Mode = hideFirst || passedSee[sentence.id] || statuses[sentence.id] === "memorized" ? "hide" : "see";
 
   useEffect(() => {
     setListenSupported(canListen());
     try {
-      if (localStorage.getItem(MODE_KEY) === "hide") setMode("hide");
+      if (localStorage.getItem(HIDE_FIRST_KEY) === "1" || localStorage.getItem(OLD_MODE_KEY) === "hide") setHideFirst(true);
     } catch {}
     setLoaded(true);
     return () => {
@@ -92,11 +101,13 @@ export default function Practice({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [idx, loaded]);
 
-  function changeMode(m: Mode) {
-    if (m !== mode) playSfx("tap");
-    setMode(m);
+  function toggleHideFirst() {
+    const next = !hideFirst;
+    playSfx("tap");
+    setHideFirst(next);
     try {
-      localStorage.setItem(MODE_KEY, m);
+      localStorage.setItem(HIDE_FIRST_KEY, next ? "1" : "0");
+      localStorage.removeItem(OLD_MODE_KEY);
     } catch {}
   }
 
@@ -121,6 +132,7 @@ export default function Practice({
       setResult(data);
       if (data.usageLeft !== null) setUsageLeft(data.usageLeft);
       setStatuses((s) => ({ ...s, [sentence.id]: data.status }));
+      if (mode === "see" && data.diff.score >= STEP_UP_SCORE) setPassedSee((p) => ({ ...p, [sentence.id]: true }));
       setPhase("result");
     },
     [sentence.id, mode, statuses],
@@ -196,8 +208,34 @@ export default function Practice({
       <div className="en muted" style={{ fontSize: 14, fontWeight: 600 }}>
         {idx + 1} / {total}
       </div>
+      <button type="button" className="icon-btn" style={{ justifyContent: "center" }} aria-label="연습 설정" onClick={() => setSheet(true)}>
+        <SlidersIcon />
+      </button>
     </div>
   );
+
+  // 속도와 "처음부터 가리고 말하기"는 설정 시트 안으로 (화면에는 마이크 하나만 크게)
+  const settingsSheet = sheet ? (
+    <div className="sheet-backdrop" onClick={() => setSheet(false)}>
+      <div className="sheet" role="dialog" aria-modal="true" aria-label="연습 설정" onClick={(e) => e.stopPropagation()}>
+        <h2 className="section-title">연습 설정</h2>
+        <RateControl />
+        <label className="row switch-row">
+          <span style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+            <span style={{ fontSize: 15 }}>처음부터 가리고 말하기</span>
+            <span className="muted" style={{ fontSize: 12 }}>끄면 보면서 말하기를 {STEP_UP_SCORE}점 넘긴 뒤 가리고 말하기로 넘어가요</span>
+          </span>
+          <span className="switch">
+            <input type="checkbox" role="switch" checked={hideFirst} onChange={toggleHideFirst} />
+            <span aria-hidden="true" />
+          </span>
+        </label>
+        <button type="button" className="btn btn-primary" onClick={() => setSheet(false)}>
+          닫기
+        </button>
+      </div>
+    </div>
+  ) : null;
 
   // ───── 다 끝남 ─────
   if (phase === "finished") {
@@ -287,15 +325,39 @@ export default function Practice({
             </p>
           )}
         </div>
-        <div className="bottom btn-row">
-          <button type="button" className="btn btn-outline" onClick={retry}>
-            <ReplayIcon />
-            다시 말하기
-          </button>
-          <button type="button" className="btn btn-primary" onClick={() => goTo(idx + 1)}>
-            {idx + 1 >= total ? "마치기" : "다음 문장"}
-          </button>
+        {/* 큰 버튼은 하나: 보면서 통과 → 가리고 말해 보기 / 못 미침 → 다시 말하기 / 외움 → 다음 문장 */}
+        <div className="bottom" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+          {result.status !== "memorized" && passedSee[sentence.id] && mode === "hide" && result.diff.score >= STEP_UP_SCORE && !hideFirst ? (
+            <>
+              <button type="button" className="btn btn-primary" onClick={retry}>
+                가리고 말해 보기
+              </button>
+              <button type="button" className="text-link" onClick={() => goTo(idx + 1)}>
+                {idx + 1 >= total ? "마치기" : "다음 문장으로"}
+              </button>
+            </>
+          ) : result.status === "memorized" || diff.score >= STEP_UP_SCORE ? (
+            <>
+              <button type="button" className="btn btn-primary" onClick={() => goTo(idx + 1)}>
+                {idx + 1 >= total ? "마치기" : "다음 문장"}
+              </button>
+              <button type="button" className="text-link" onClick={retry}>
+                한 번 더 말하기
+              </button>
+            </>
+          ) : (
+            <>
+              <button type="button" className="btn btn-primary" onClick={retry}>
+                <ReplayIcon color="#FFFFFF" />
+                다시 말하기
+              </button>
+              <button type="button" className="text-link" onClick={() => goTo(idx + 1)}>
+                {idx + 1 >= total ? "마치기" : "다음 문장으로"}
+              </button>
+            </>
+          )}
         </div>
+        {settingsSheet}
       </main>
     );
   }
@@ -306,50 +368,36 @@ export default function Practice({
     <main className="screen">
       <div className="pad" style={{ gap: 14 }}>
         {header}
-        <div className="muted" style={{ fontSize: 14 }}>
-          {topic.title_ko} · {hidden ? "한글 뜻을 보고 영어로 말해 보세요" : "모범 문장을 듣고 따라 말해 보세요"}
+        <div className="steps" aria-label={hidden ? "2단계 가리고 말하기" : "1단계 보면서 말하기"}>
+          <span data-state={hidden ? "done" : "now"}>1 보면서</span>
+          <ChevronIcon size={14} color="#9aa3b2" />
+          <span data-state={hidden ? "now" : undefined}>2 가리고</span>
+          <span className="muted" style={{ fontSize: 12, marginLeft: "auto" }}>
+            {hidden ? `${90}점 넘으면 외움` : "잘 말하면 다음은 가리고"}
+          </span>
         </div>
 
-        <section className="card" style={{ padding: 18 }}>
-          <div className="row" style={{ alignItems: "center" }}>
-            <div className="label">모범 문장</div>
-            <button
-              type="button"
-              className="chip"
-              style={{ height: 36, gap: 6 }}
-              onClick={() => speak(sentence.en)}
-            >
-              <SpeakerIcon size={16} />
-              다시 듣기
-            </button>
-          </div>
+        <button type="button" className="card model-card" style={{ padding: 18 }} onClick={() => speak(sentence.en)} aria-label="모범 문장 다시 듣기">
+          <span className="row" style={{ alignItems: "center" }}>
+            <span className="label">모범 문장 · 누르면 다시 들려요</span>
+            <SpeakerIcon size={18} color="var(--muted)" />
+          </span>
           {hidden ? (
-            <div className="hidden-lines" aria-label="영어 문장이 가려져 있어요">
-              <div style={{ width: "92%" }} />
-              <div style={{ width: "60%" }} />
-              <div className="muted" style={{ height: "auto", background: "none", fontSize: 13, marginTop: 4 }}>
-                외워서 말하기 모드 · 한글 뜻만 보여요
-              </div>
-            </div>
+            <span className="hidden-lines" aria-label="영어 문장이 가려져 있어요">
+              <span style={{ width: "92%" }} />
+              <span style={{ width: "60%" }} />
+              <span className="muted" style={{ height: "auto", background: "none", fontSize: 13, marginTop: 4 }}>
+                가리고 말하기 · 한글 뜻을 보고 영어로 말해 보세요
+              </span>
+            </span>
           ) : (
             <>
-              <div className="model-en" lang="en">{sentence.en}</div>
-              <div className="pr-line" style={{ fontSize: 14 }}>{sentence.pronunciation}</div>
+              <span className="model-en" lang="en">{sentence.en}</span>
+              <span className="pr-line" style={{ fontSize: 14 }}>{sentence.pronunciation}</span>
             </>
           )}
-          <div className="ko-line" style={{ fontSize: 14 }}>{sentence.ko}</div>
-        </section>
-
-        <div className="btn-row" role="group" aria-label="연습 방식">
-          <button type="button" className="toggle" aria-pressed={!hidden} onClick={() => changeMode("see")} disabled={phase !== "ready"}>
-            보면서 말하기
-          </button>
-          <button type="button" className="toggle" aria-pressed={hidden} onClick={() => changeMode("hide")} disabled={phase !== "ready"}>
-            가리고 말하기
-          </button>
-        </div>
-
-        <RateControl />
+          <span className="ko-line" style={{ fontSize: 14 }}>{sentence.ko}</span>
+        </button>
 
         {(phase === "rec" || (phase === "thinking" && partial)) && (
           <div className="bubble" aria-live="polite">
@@ -387,9 +435,7 @@ export default function Practice({
 
       <div className="bottom" style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 14, paddingTop: 16 }}>
         <div className="mic-row">
-          <button type="button" className="text-btn" style={{ justifySelf: "end" }} onClick={() => goTo(idx + 1)} disabled={phase === "thinking"}>
-            건너뛰기
-          </button>
+          <span />
           <button
             type="button"
             className={`mic${phase === "rec" ? " rec" : ""}${phase === "thinking" ? " thinking" : ""}`}
@@ -414,7 +460,11 @@ export default function Practice({
               ? "잠시만 기다려 주세요"
               : "버튼을 누르고 말해 보세요"}
         </div>
+        <button type="button" className="text-link" onClick={() => goTo(idx + 1)} disabled={phase === "thinking" || phase === "rec"}>
+          이 문장 건너뛰기
+        </button>
       </div>
+      {settingsSheet}
     </main>
   );
 }

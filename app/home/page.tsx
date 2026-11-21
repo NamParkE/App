@@ -2,12 +2,11 @@ import Link from "next/link";
 import { after } from "next/server";
 import BottomNav from "@/components/BottomNav";
 import TopicBrowser, { type TopicItem } from "./TopicBrowser";
-import { ChevronIcon, PlayIcon } from "@/components/Icons";
+import { ListIcon, MicIcon } from "@/components/Icons";
 import { checkProfile, fetchProfile, myStreak, requireUser, todayKst, usageToday } from "@/lib/data";
 import { StreakChip } from "@/components/Flame";
 import CallHome, { type CallTopic, type LessonRow } from "./CallHome";
 import HomeModeSwitch, { ModeTabs } from "./ModeSwitch";
-import HomeReppy from "./HomeReppy";
 import { allProgress, progressFor, SENTENCE_COUNT } from "@/lib/progress";
 import { CATEGORIES, one, type Category, type Topic } from "@/lib/types";
 import { closeStale, splitActive, type ActiveLessonRow } from "@/lib/call/server";
@@ -65,10 +64,8 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   const progress = progressFor(progressRows, profile.level, profile.opic_source);
 
-  const leftPct = profile.daily_limit ? Math.round((left / profile.daily_limit) * 100) : 0;
   const lastTopic = last ? topics?.find((t) => t.id === last.topic_id) : undefined;
   const lastPos = one<{ position: number }>(last?.sentences)?.position;
-  const lastTotal = lastTopic ? progress.get(lastTopic.id)?.total ?? SENTENCE_COUNT[profile.level] : 0;
   const items: TopicItem[] = (topics ?? []).map((t) => {
     const p = progress.get(t.id);
     return {
@@ -93,48 +90,64 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
     />
   );
 
+  // "오늘 할 것": 마지막으로 연습한 주제에 외우지 않은 문장이 있으면 그 주제, 아니면 지금 분류에서 처음으로 다 못 외운 주제
+  const lastItem = lastTopic ? items.find((t) => t.id === lastTopic.id) : undefined;
+  const continuing = !!lastItem && lastItem.done < lastItem.total && progress.has(lastItem.id);
+  const todayItem = continuing
+    ? lastItem
+    : items.find((t) => t.category === category && t.done < t.total) ?? items.find((t) => t.done < t.total);
+  const todayHas = todayItem ? (progress.get(todayItem.id)?.total ?? 0) > 0 : false;
+  const catLabel = (c: Category) => CATEGORIES.find((x) => x.id === c)?.label ?? "";
+
   const memorizeView = (
     <main className="screen">
       <div className="pad">
+        <ModeTabs />
         <div className="row" style={{ alignItems: "center" }}>
           <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
-            <div className="muted" style={{ fontSize: 14 }}>{profile.display_name}님, 오늘도 한 주제씩</div>
-            <h1 className="sr-only">오픽 암기형</h1>
-            <ModeTabs badge={profile.level} />
+            <div className="muted" style={{ fontSize: 13 }}>{profile.display_name}님, 오늘도 한 주제씩</div>
+            <h1 style={{ margin: 0, fontSize: 20, fontWeight: 700 }}>
+              오늘의 연습 <span className="en" style={{ fontSize: 14, color: "var(--accent)" }}>{profile.level}</span>
+            </h1>
           </div>
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
 
-        <HomeReppy streak={streak.streak} studiedToday={streak.studiedToday} mode="memorize" />
-
-        <section className="usage" aria-label="오늘 남은 연습">
-          <div className="row">
-            <div style={{ fontSize: 14, color: "var(--dark-muted)" }}>오늘 남은 연습</div>
-            <div className="en" style={{ fontSize: 14, color: "var(--dark-muted)" }}>
-              <span style={{ fontSize: 26, fontWeight: 700, color: "#fff" }}>{left}</span> / {profile.daily_limit}회
+        {todayItem ? (
+          <section className="hero-card" aria-label="오늘 할 것">
+            <span className="sub">
+              {continuing ? "이어서 하기" : todayHas ? "다음 주제" : "새 주제"} · {catLabel(todayItem.category)}
+            </span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 22, fontWeight: 700 }}>{todayItem.title_ko}</span>
+              <span className="sub" style={{ fontSize: 14 }}>
+                {todayHas
+                  ? `${todayItem.total}문장 중 ${todayItem.done}문장 외움${continuing && lastPos !== undefined ? ` · 다음은 문장 ${Math.min(lastPos + 2, todayItem.total)}` : ""}`
+                  : "답변을 준비하고 연습을 시작해요"}
+              </span>
             </div>
-          </div>
-          <div className="track">
-            <div style={{ width: `${leftPct}%` }} />
-          </div>
-          <small>
-            {left > 0 ? "자정에 다시 채워져요" : "오늘 AI 코치는 다 썼어요. 비교 결과는 계속 볼 수 있어요"}
-          </small>
-        </section>
-
-        {lastTopic && lastPos !== undefined && (
-          <Link href={`/topic/${lastTopic.id}`} className="card continue">
-            <div className="play">
-              <PlayIcon />
-            </div>
-            <div style={{ display: "flex", flexDirection: "column", gap: 2, flexGrow: 1 }}>
-              <div className="muted" style={{ fontSize: 13 }}>이어서 하기</div>
-              <div style={{ fontSize: 16, fontWeight: 700 }}>
-                {lastTopic.title_ko} · 문장 {lastPos + 1} / {lastTotal}
+            {todayHas && (
+              <div className="hero-track">
+                <div style={{ width: `${Math.round((todayItem.done / Math.max(1, todayItem.total)) * 100)}%` }} />
               </div>
-            </div>
-            <ChevronIcon />
-          </Link>
+            )}
+            <Link href={todayHas ? `/practice/${todayItem.id}` : `/topic/${todayItem.id}`} className="btn btn-primary">
+              <MicIcon size={20} color="#FFFFFF" />
+              {continuing ? "이어서 연습" : "연습 시작"}
+            </Link>
+            <a href="#topics" className="btn hero-outline">
+              <ListIcon size={18} color="#FFFFFF" />
+              다른 주제 고르기
+            </a>
+            <span className="sub" style={{ fontSize: 12, textAlign: "center" }}>
+              {left > 0 ? `오늘 연습 ${left}회 남음 · 자정에 다시 채워져요` : "오늘 AI 코치는 다 썼어요. 비교 결과는 계속 볼 수 있어요"}
+            </span>
+          </section>
+        ) : (
+          <section className="hero-card" aria-label="오늘 할 것">
+            <span style={{ fontSize: 20, fontWeight: 700 }}>모든 주제를 외웠어요!</span>
+            <span className="sub">아래 목록에서 다시 복습할 주제를 골라 보세요.</span>
+          </section>
         )}
 
         <TopicBrowser items={items} initialCat={category} />

@@ -58,18 +58,18 @@ export default function HomeModeSwitch({
   );
 }
 
-/** 홈 위쪽 제목 자리의 "오픽 암기 | 전화영어" 탭 */
-export function ModeTabs({ badge }: { badge?: string }) {
+/** 홈 맨 위의 "오픽 암기 | 전화영어" 전환. 두 모드가 항상 보이고 지금 모드가 칠해진다 (화면 이동용이라 작고 옅게). */
+export function ModeTabs() {
   const ctx = useContext(ModeContext);
   if (!ctx) return null;
   const { style, pick } = ctx;
   return (
     <div className="mode-tabs" role="tablist" aria-label="학습 모드">
       <button type="button" role="tab" aria-selected={style === "memorize"} onClick={() => pick("memorize")}>
-        오픽 암기{style === "memorize" && badge ? <span className="en mode-badge">{badge}</span> : null}
+        오픽 암기
       </button>
       <button type="button" role="tab" aria-selected={style === "vocab"} onClick={() => pick("vocab")}>
-        전화영어{style === "vocab" && badge ? <span className="en mode-badge">{badge}</span> : null}
+        전화영어
       </button>
     </div>
   );
