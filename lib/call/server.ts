@@ -28,9 +28,11 @@ export interface LoadedLesson {
   history: ChatMessage[];
 }
 
-/** 수업 + 계획 + 주제 + 대화 기록을 한 번에 (동시에 두 쿼리) */
+export class LessonHistoryError extends Error {}
+
+/** 수업 + 계획 + 주제 + 대화 기록을 한 번에 (동시에 두 쿼리). 기록을 못 읽으면 LessonHistoryError */
 export async function loadLesson(supabase: DB, lessonId: string): Promise<LoadedLesson | null> {
-  const [{ data: lesson }, { data: messages }] = await Promise.all([
+  const [{ data: lesson }, { data: messages, error: messagesError }] = await Promise.all([
     supabase
       .from("lessons")
       .select("id, status, level, turns, hints, sos, started_at, last_active_at, topic_id, lesson_plans(plan), call_topics(title_en, title_ko)")
@@ -43,6 +45,8 @@ export async function loadLesson(supabase: DB, lessonId: string): Promise<Loaded
       .order("id"),
   ]);
   if (!lesson) return null;
+  // 기록을 못 읽었는데 빈 대화로 넘기면 선생님이 처음부터 다시 묻는다 (같은 질문 되풀이). 오류로 알린다
+  if (messagesError) throw new LessonHistoryError(messagesError.message);
   const plan = one<{ plan: LessonPlan }>(lesson.lesson_plans)?.plan;
   const topic = one<{ title_en: string; title_ko: string }>(lesson.call_topics);
   const topicTitle = topic?.title_en ?? "";

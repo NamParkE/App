@@ -104,13 +104,14 @@ export async function POST(request: Request) {
   }
 
   const opening = { role: "tutor" as const, text: plan.plan.opening, ko: plan.plan.opening_ko, correction: null };
-  // 첫 마디 저장 · 영수증을 수업에 묶기(대답 없이 끝나면 환불용)는 기다리지 않는다 (다음 턴까지 몇 초 여유가 있다)
+  // 첫 마디는 응답 전에 저장한다 (늦으면 첫 대답 때 선생님이 첫 질문을 몰라 다시 묻는다. 그래도 프롬프트가 계획의 첫 마디를 채운다)
+  await saveOrLog(`opening (lesson ${lesson.id})`, () =>
+    admin.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
+  );
+  // 영수증을 수업에 묶기(대답 없이 끝나면 환불용)는 기다리지 않는다
   after(async () => {
     await saveOrLog(`link charge (lesson ${lesson.id})`, () =>
       supabase.rpc("link_charge", { p_ticket: charge.ticket, p_lesson: lesson.id }),
-    );
-    await saveOrLog(`opening (lesson ${lesson.id})`, () =>
-      admin.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
     );
   });
 

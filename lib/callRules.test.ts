@@ -34,3 +34,26 @@ test("splitActive: 가장 최근 하나만 이어하고 나머지는 닫는다",
   assert.deepEqual(stale.map((r) => r.id).sort(), ["a", "old"]);
   assert.deepEqual(splitActive([old], now), { resumable: null, stale: [old] });
 });
+
+test("withOpening: 기록이 학생 말로 시작하면 선생님 첫 마디를 앞에 붙인다", async () => {
+  const { withOpening } = await import("./call/rules.ts");
+  assert.deepEqual(withOpening([user()], "Hi! How are you?").map((m) => m.role), ["tutor", "user"]);
+  assert.equal(withOpening([], "Hi!")[0].text, "Hi!");
+  const h = [tutor("Hello"), user()];
+  assert.equal(withOpening(h, "Hi!"), h);
+});
+
+test("nextQuestionIndex: 센 대답 수만큼 질문이 지나간다 (끝을 넘지 않음)", async () => {
+  const { nextQuestionIndex } = await import("./call/rules.ts");
+  assert.equal(nextQuestionIndex([tutor()], 6), 0);
+  assert.equal(nextQuestionIndex([tutor(), user(), tutor(), user(false), tutor()], 6), 1);
+  assert.equal(nextQuestionIndex(Array(20).fill(user()), 6), 5);
+});
+
+test("repeatsLastTutor: 바로 앞 선생님 말과 같은 말인지 (문장부호 · 대소문자 무시)", async () => {
+  const { repeatsLastTutor } = await import("./call/rules.ts");
+  const h = [tutor("What do you like to eat?"), user()];
+  assert.equal(repeatsLastTutor(h, "what do you like to eat"), true);
+  assert.equal(repeatsLastTutor(h, "Nice! What did you eat yesterday?"), false);
+  assert.equal(repeatsLastTutor([user()], "Hi"), false);
+});

@@ -36,3 +36,27 @@ export function splitActive(rows: ActiveLessonRow[], now = Date.now()) {
   // 이어서 할 하나만 남기고 나머지(시간이 지난 것, 혹시 여러 개 열린 것)는 닫는다
   return { resumable, stale: rows.filter((r) => r !== resumable) };
 }
+
+// ───── 같은 질문 되풀이 막기 ─────
+
+/** 대화 기록이 선생님 첫 마디로 시작하지 않으면(첫 마디 저장이 늦거나 실패) 첫 마디를 앞에 붙인다 */
+export function withOpening(history: ChatMessage[], opening: string): ChatMessage[] {
+  if (history[0]?.role === "tutor") return history;
+  return [{ role: "tutor", text: opening }, ...history];
+}
+
+/** 이번에 이어 갈 질문 순서 (센 대답 수 = 이미 지나간 질문 수) */
+export function nextQuestionIndex(history: ChatMessage[], total: number) {
+  const answered = history.filter((m) => m.role === "user" && m.counted !== false).length;
+  return Math.min(answered, Math.max(0, total - 1));
+}
+
+const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+
+/** 선생님의 새 말이 바로 앞 선생님 말과 사실상 같은지 (문장부호 · 대소문자 무시) */
+export function repeatsLastTutor(history: ChatMessage[], reply: string) {
+  for (let i = history.length - 1; i >= 0; i--) {
+    if (history[i].role === "tutor") return norm(history[i].text) === norm(reply);
+  }
+  return false;
+}
