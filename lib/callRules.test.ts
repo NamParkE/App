@@ -57,3 +57,13 @@ test("repeatsLastTutor: 바로 앞 선생님 말과 같은 말인지 (문장부�
   assert.equal(repeatsLastTutor(h, "Nice! What did you eat yesterday?"), false);
   assert.equal(repeatsLastTutor([user()], "Hi"), false);
 });
+
+test("turnRows: 학생 · 선생님 두 줄의 칸이 같고 counted 가 비지 않는다 (빠지면 저장이 매번 실패했다)", async () => {
+  const { turnRows } = await import("./call/rules.ts");
+  const [u, t] = turnRows({ lesson_id: "l", user_id: "u" }, "I like it", false, { text: "Great!", ko: "좋아요", correction: null });
+  assert.deepEqual(Object.keys(u).sort(), Object.keys(t).sort());
+  assert.equal(u.counted, false);
+  assert.equal(t.counted, true);
+  assert.equal(u.role, "user");
+  assert.equal(t.role, "tutor");
+});

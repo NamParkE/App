@@ -5,7 +5,7 @@ import { describeClaudeError } from "@/lib/claude";
 import { tutorTurn } from "@/lib/call/claude";
 import { LESSON_TURNS, MAX_SKIPS } from "@/lib/call/levels";
 import { fail, LessonHistoryError, loadLesson, saveOrLog } from "@/lib/call/server";
-import { repeatsLastTutor, trailingSkips, withOpening } from "@/lib/call/rules";
+import { repeatsLastTutor, trailingSkips, turnRows, withOpening } from "@/lib/call/rules";
 import { adminClient, MISSING_SERVICE_KEY } from "@/lib/supabase/admin";
 import type { TurnResponse } from "@/lib/call/types";
 
@@ -75,10 +75,12 @@ export async function POST(request: Request) {
   // 대화를 먼저 저장하고(응답 전에 기다린다), 성공했을 때만 턴 수를 올린다.
   // 기록 없이 응답하면 다음 턴에서 선생님이 앞 대화를 모르게 된다.
   const saved = await saveOrLog(`turn ${turnNumber} messages (lesson ${lesson.id})`, () =>
-    admin.from("lesson_messages").insert([
-      { lesson_id: lesson.id, user_id: userId, role: "user", text: parsed.data.said, counted },
-      { lesson_id: lesson.id, user_id: userId, role: "tutor", text: out.reply, ko: out.ko, correction: out.correction },
-    ]),
+    // 두 줄의 칸을 똑같이 채운다 (turnRows 참고: 칸이 다르면 NOT NULL 에 걸려 저장이 매번 실패했다)
+    admin
+      .from("lesson_messages")
+      .insert(turnRows({ lesson_id: lesson.id, user_id: userId }, parsed.data.said, counted, { text: out.reply, ko: out.ko, correction: out.correction }), {
+        defaultToNull: false,
+      }),
   );
   if (!saved) return fail(503, "대화를 저장하지 못했어요. 다시 말해 주세요.");
   // 턴 수 저장이 실패해도 대화는 저장됐으므로 응답한다 (다시 보내게 하면 같은 대답이 두 번 쌓인다)

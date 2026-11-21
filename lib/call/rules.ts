@@ -60,3 +60,20 @@ export function repeatsLastTutor(history: ChatMessage[], reply: string) {
   }
   return false;
 }
+
+/**
+ * 한 턴의 대화 두 줄 (학생 말 + 선생님 말). lesson_messages 에 한 번에 넣는다.
+ * 두 줄의 칸이 같아야 한다: supabase-js 는 한쪽에만 있는 칸을 다른 줄에 NULL 로 넣어서,
+ * 선생님 줄에 counted(NOT NULL)가 빠졌을 때 대화가 한 번도 저장되지 않았다.
+ */
+export function turnRows(
+  base: { lesson_id: string; user_id: string },
+  said: string,
+  counted: boolean,
+  reply: { text: string; ko: string | null; correction: unknown },
+) {
+  return [
+    { ...base, role: "user" as const, text: said, ko: null, correction: null, counted },
+    { ...base, role: "tutor" as const, text: reply.text, ko: reply.ko, correction: reply.correction ?? null, counted: true },
+  ];
+}
