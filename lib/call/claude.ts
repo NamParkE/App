@@ -106,6 +106,44 @@ const TurnSchema = z.object({
     })
     .nullable()
     .describe("The single most useful correction of the student's last answer, or null if it was fine"),
+  stuck: z
+    .boolean()
+    .describe(
+      "true when the student is stuck rather than really answering: 'I don't know', 'I'm not sure', Korean words, " +
+        "or a word or two that does not answer the question. A short but real answer (e.g. 'Rainy.') is NOT stuck.",
+    ),
+  choices: z
+    .array(z.string())
+    .describe("If your reply asks the student to choose between two options, the two short options (1-3 words each). Otherwise an empty array."),
+  starter: z
+    .string()
+    .nullable()
+    .describe("If your reply gives the student the first words to start with, that sentence with a blank, e.g. 'Today it is ___.' Otherwise null."),
+  repeat: z
+    .object({
+      sentence: z.string().describe("The sentence for the student to say after you (natural English at their level, at most 14 words)"),
+      ko: z.string().describe("Korean translation of the sentence"),
+      praise: z.string().describe("A short praise you will say after they repeat it, e.g. 'Perfect!'"),
+      next: z.string().describe("The next question you will ask after the practice, continuing the conversation"),
+      next_ko: z.string().describe("Korean translation of the next question"),
+    })
+    .nullable()
+    .describe("Only when asked to set up a repeat practice (see the notes). Otherwise null."),
+  help: z
+    .object({
+      choice: z.string().describe("If the student stays silent after your reply: re-ask your question more simply as a choice between two options, kindly (e.g. 'Take your time! Is it sunny, or is it rainy?')"),
+      choice_ko: z.string(),
+      choices: z.array(z.string()).describe("The two short options in that line"),
+      starter_line: z.string().describe("If still silent: an invitation to start together, e.g. 'Let's start together. Try saying:'"),
+      starter_ko: z.string(),
+      starter: z.string().describe("A sentence with a blank the student can complete to answer, e.g. 'Today it is ___.'"),
+    })
+    .nullable()
+    .describe("Help lines for silence after THIS reply, about the question you are asking now (or repeat.next). null only for the final goodbye."),
+  best: z
+    .string()
+    .nullable()
+    .describe("Only in the final goodbye: the best English sentence the student said in this lesson, lightly corrected. Otherwise null."),
   emotion: z
     .enum(EMOTIONS)
     .describe(
@@ -139,7 +177,10 @@ function tutorSystem(level: number, topicTitle: string, plan: LessonPlan, kids: 
     "- When the student makes a mistake, do not say they are wrong. Recast it naturally in your reply " +
     "(e.g. student: 'I go to the park yesterday' -> you: 'Oh, you went to the park yesterday! What did you do there?').\n" +
     "- The student's words come from speech recognition, so ignore punctuation and obvious mishearings.\n" +
-    "- If the student seems stuck or answers in very few words, help with a simpler question or a choice.\n" +
+    "- Your job is also to make a nervous learner feel safe to try. Praise every real attempt warmly and specifically.\n" +
+    "- When the student is stuck (stuck true) or the answer is not a real attempt, never scold and do not move on. Help step by step: " +
+    "if your previous line was not already a choice question, re-ask more simply as a choice between two options (fill choices); " +
+    "if your previous line already offered a choice, give them the first words to start with: say 'Let's start together. Try saying:' and fill starter with a sentence that has a blank ___.\n" +
     "- If the answer is not a real attempt (on_task false), do not scold and do not move on: react lightly and kindly, " +
     "then ask the same question again in a simpler way, such as a choice between two options.\n" +
     "- No emojis, lists or symbols; this is spoken audio.\n" +
@@ -155,6 +196,7 @@ function toApiMessages(
   isLast: boolean,
   mustCount: boolean,
   avoid?: string,
+  stage?: string,
 ): Anthropic.Beta.Messages.BetaMessageParam[] {
   const msgs: Anthropic.Beta.Messages.BetaMessageParam[] = [{ role: "user", content: "[The student picks up the call.]" }];
   for (const m of history) msgs.push({ role: m.role === "tutor" ? "assistant" : "user", content: m.text });
@@ -171,8 +213,49 @@ function toApiMessages(
   const again = avoid
     ? `\n\n[Note to Reppy: do not repeat your previous line ("${untag(avoid)}"). React to this answer and say something new.]`
     : "";
-  msgs.push({ role: "user", content: said + recap + note + again });
+  msgs.push({ role: "user", content: said + recap + (stage ? `\n\n${stage}` : "") + note + again });
   return msgs;
+}
+
+export type TurnOut = {
+  onTask: boolean;
+  stuck: boolean;
+  reply: string;
+  ko: string;
+  correction: Correction | null;
+  emotion: Emotion;
+  choices: string[];
+  starter: string | null;
+  repeat: { sentence: string; ko: string; praise: string; next: string; next_ko: string } | null;
+  help: { choice: string; choice_ko: string; choices: string[]; starter_line: string; starter_ko: string; starter: string } | null;
+  best: string | null;
+};
+
+/** 이번 대답(n번째)에 맞는 수업 단계 안내. 대답을 세지 않을 때(막힘 · 엉뚱한 대답)는 단계를 넘기지 않는다 */
+function stageNote(args: { turnNumber: number; practiceAllowed: boolean; stageSentence?: string | null; topicTitle: string }) {
+  const n = args.turnNumber;
+  const notCounted = " If the student is stuck or this is not a real attempt, ignore this step and help them instead (do not move on).";
+  if (n === 1) return "[Lesson step: warm-up. React warmly to how their day was, then ask one more friendly small-talk question about their day or week.]";
+  if (n === 2)
+    return `[Lesson step: warm-up is ending. React, then smoothly move to today's topic (${args.topicTitle}) and ask the first topic question.${notCounted}]`;
+  if (n === LESSON_TURNS - 2)
+    return (
+      "[Lesson step: after reacting, set up a repeat practice. Choose one useful sentence for the student to say after you, " +
+      "preferably a natural, slightly longer version of something they said earlier (or a corrected sentence). " +
+      "Say 'Let's practice one sentence together!' and ask them to say it. Fill repeat with that sentence (repeat.next can be empty). " +
+      "Do not ask a new topic question." + notCounted + "]"
+    );
+  if (n === LESSON_TURNS - 1)
+    return (
+      `[Lesson step: the student just tried to say the practice sentence${args.stageSentence ? ` "${untag(args.stageSentence)}"` : ""}. ` +
+      "Praise the effort (say so if it was close), then ask one wrap-up question about today's conversation." + notCounted + "]"
+    );
+  if (n >= LESSON_TURNS)
+    return "[Lesson step: final goodbye. Praise specifically what the student said well today, say what you could talk about next time, and say goodbye. No question. Fill best.]";
+  return args.practiceAllowed
+    ? "[Lesson step: topic conversation. If this is a real but very short answer (1-4 words), praise it warmly, offer a longer natural version and ask them to say it with you: " +
+        "fill repeat (sentence, ko, praise, next = your next question, next_ko) and do NOT put the next question in your reply. Otherwise just continue the conversation.]"
+    : "[Lesson step: topic conversation. Continue the conversation from what the student said.]";
 }
 
 export async function tutorTurn(args: {
@@ -188,7 +271,11 @@ export async function tutorTurn(args: {
   kids: boolean;
   /** 방금 만든 대답이 바로 앞 말과 똑같아 다시 만들 때: 피해야 할 말 */
   avoid?: string;
-}): Promise<{ onTask: boolean; reply: string; ko: string; correction: Correction | null; emotion: Emotion }> {
+  /** 이번 대답 뒤에 따라 말하기 연습을 넣어도 되는지 (주제 대화 중, 수업당 최대 횟수 안) */
+  practiceAllowed: boolean;
+  /** 7번째 대답(따라 말하기 단계)에서 학생이 따라 말할 문장 */
+  stageSentence?: string | null;
+}): Promise<TurnOut> {
   const isLast = args.turnNumber >= LESSON_TURNS;
   // 첫 마디 저장이 늦거나 실패해도 선생님이 첫 질문을 알도록
   const history = withOpening(args.history, args.plan.opening);
@@ -196,10 +283,22 @@ export async function tutorTurn(args: {
     { userId: args.userId, kind: "turn" },
     TurnSchema,
     tutorSystem(args.level, args.topicTitle, args.plan, args.kids, args.turnNumber),
-    toApiMessages(history, args.said, isLast, args.mustCount, args.avoid),
-    800,
+    toApiMessages(history, args.said, isLast, args.mustCount, args.avoid, stageNote(args)),
+    2000,
   );
-  return { onTask: out.on_task, reply: out.reply, ko: out.ko, correction: out.correction, emotion: out.emotion };
+  return {
+    onTask: out.on_task,
+    stuck: out.stuck,
+    reply: out.reply,
+    ko: out.ko,
+    correction: out.correction,
+    emotion: out.emotion,
+    choices: out.choices,
+    starter: out.starter,
+    repeat: out.repeat,
+    help: out.help,
+    best: out.best,
+  };
 }
 
 // ───── 한국어로 묻기 ─────

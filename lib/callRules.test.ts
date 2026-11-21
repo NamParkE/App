@@ -68,8 +68,85 @@ test("turnRows: 학생 · 선생님 두 줄의 칸이 같고 counted 가 비지 
   const { turnRows } = await import("./call/rules.ts");
   const [u, t] = turnRows({ lesson_id: "l", user_id: "u" }, "I like it", false, { text: "Great!", ko: "좋아요", correction: null });
   assert.deepEqual(Object.keys(u).sort(), Object.keys(t).sort());
+  const withHelp = turnRows({ lesson_id: "l", user_id: "u" }, "Rainy", true, { text: "Nice!", ko: null, correction: null }, [{ text: "Sunny or rainy?", ko: "맑아요, 비 와요?" }]);
+  assert.equal(withHelp.length, 3);
+  assert.equal(withHelp[0].kind, "help");
+  for (const row of withHelp) assert.deepEqual(Object.keys(row).sort(), Object.keys(withHelp[1]).sort());
   assert.equal(u.counted, false);
   assert.equal(t.counted, true);
   assert.equal(u.role, "user");
   assert.equal(t.role, "tutor");
+});
+
+test("stageOf: 대답 1~2 인사, 3~6 주제, 7 따라 말하기, 8 마무리", async () => {
+  const { stageOf } = await import("./call/rules.ts");
+  assert.deepEqual([1, 2, 3, 6, 7, 8].map((n) => stageOf(n, 8)), ["warmup", "warmup", "topic", "topic", "repeat", "wrapup"]);
+});
+
+test("따라 말하기 연습은 엉뚱한 대답(건너뛴 대답) · 학생이 한 말 모음에 들어가지 않는다", async () => {
+  const { trailingSkips, practiceRepeats, studentFacts } = await import("./call/rules.ts");
+  const h: ChatMessage[] = [
+    tutor(),
+    { role: "user", text: "Rainy", counted: true },
+    tutor(),
+    { role: "user", text: "It's raining a lot today", counted: false, kind: "repeat" },
+  ];
+  assert.equal(trailingSkips(h), 0);
+  assert.equal(practiceRepeats(h), 1);
+  assert.deepEqual(studentFacts(h), ["Rainy"]);
+});
+
+test("첫마디 빈칸 문장 · 인사 첫 마디", async () => {
+  const { validStarter, warmupOpening } = await import("./call/rules.ts");
+  assert.equal(validStarter("Today it is ___."), true);
+  assert.equal(validStarter("Today it is rainy."), false);
+  assert.equal(validStarter(null), false);
+  assert.equal(warmupOpening("민지").text, "Hi 민지! It's Reppy. How was your day today?");
+  assert.equal(warmupOpening("<b>").text, "Hi b! It's Reppy. How was your day today?");
+  assert.equal(warmupOpening("").text, "Hi! It's Reppy. How was your day today?");
+});
+
+test("shapeTurn: 따라 말하기 카드 · 칩 · 첫마디 · 도움 말 다듬기", async () => {
+  const { shapeTurn, FALLBACK_HELP } = await import("./call/rules.ts");
+  const help = { choice: "Is it sunny or rainy?", choice_ko: "", choices: ["sunny", "rainy"], starter_line: "Try saying:", starter_ko: "", starter: "Today it is ___." };
+  const rep = { sentence: "It's raining a lot today.", ko: "", praise: "Perfect!", next: "What do you do when it rains?", next_ko: "" };
+  const base = { reply: "Great job!", choices: [], starter: null, repeat: rep, help, best: "x" };
+  const ctx = { isLast: false, counted: true, stageSetup: false, practiceAllowed: true, kids: false };
+
+  // 주제 대화 중 허용 → 연습 카드, 다음 질문은 카드에
+  const a = shapeTurn(base, ctx);
+  assert.equal(a.repeat?.mode, "practice");
+  assert.equal(a.reply, "Great job!");
+  assert.equal(a.best, null);
+  assert.deepEqual(a.help?.choices, ["sunny", "rainy"]);
+
+  // 횟수를 다 썼으면 카드는 없애고 다음 질문을 대답 뒤에 붙인다
+  const b = shapeTurn(base, { ...ctx, practiceAllowed: false });
+  assert.equal(b.repeat, null);
+  assert.equal(b.reply, "Great job! What do you do when it rains?");
+
+  // 7번째 대답 준비 → stage 카드
+  assert.equal(shapeTurn(base, { ...ctx, stageSetup: true, practiceAllowed: false }).repeat?.mode, "stage");
+  // 세지 않은 대답(막힘)에는 카드가 없다
+  assert.equal(shapeTurn(base, { ...ctx, counted: false }).repeat, null);
+
+  // 칩은 정확히 2개, 첫마디는 빈칸이 있을 때만, 도움 말이 이상하면 기본 도움 말
+  const c = shapeTurn({ ...base, repeat: null, choices: ["a", "b", "c"], starter: "No blank.", help: { ...help, starter: "no blank" } }, ctx);
+  assert.deepEqual(c.choices, []);
+  assert.equal(c.starter, null);
+  assert.equal(c.help, FALLBACK_HELP);
+
+  // 마지막 인사: 도움 말 없음, 가장 잘 말한 문장
+  const d = shapeTurn(base, { ...ctx, isLast: true });
+  assert.equal(d.help, null);
+  assert.equal(d.repeat, null);
+  assert.equal(d.best, "x");
+});
+
+test("shownHelp: 보여 준 도움 말 단계만 기록한다", async () => {
+  const { shownHelp, FALLBACK_HELP } = await import("./call/rules.ts");
+  assert.equal(shownHelp(FALLBACK_HELP, 0).length, 0);
+  assert.equal(shownHelp(FALLBACK_HELP, 1).length, 1);
+  assert.equal(shownHelp(FALLBACK_HELP, 2)[1].text, "Let's start together. Try saying: I think ___.");
+  assert.equal(shownHelp(null, 2).length, 0);
 });

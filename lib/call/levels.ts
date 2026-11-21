@@ -69,3 +69,9 @@ export const MAX_SKIPS = 2;
 export const MAX_SOS = 2;
 /** 끊긴 통화를 이어서 할 수 있는 시간 (마지막으로 주고받은 때부터) */
 export const RESUME_MINUTES = 30;
+
+// ───── 코칭 (docs/intent/call-coaching.md) ─────
+/** 리피가 질문을 마친 뒤 말이 없으면 먼저 도와주는 시간: 1단계(쉽게 다시 묻기 · 고르기), 그 뒤 2단계(첫마디 열어 주기) */
+export const HELP_WAIT_MS = [8000, 10000] as const;
+/** 수업 중 "따라 말하기" 연습 최대 횟수 (대답 수에 넣지 않음, 7번째 대답의 따라 말하기 단계는 따로) */
+export const MAX_PRACTICE_REPEATS = 2;

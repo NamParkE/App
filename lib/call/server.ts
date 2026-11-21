@@ -6,7 +6,7 @@ import { one } from "../types";
 import type { ActiveLessonRow } from "./rules";
 
 export { isResumable, splitActive, type ActiveLessonRow } from "./rules";
-import type { ChatMessage, LessonPlan } from "./types";
+import type { ChatMessage, LessonPlan, PendingHelp } from "./types";
 
 export function fail(status: number, message: string) {
   return NextResponse.json({ message }, { status });
@@ -26,6 +26,8 @@ export interface LoadedLesson {
   topicTitleKo: string;
   plan: LessonPlan;
   history: ChatMessage[];
+  /** 지난 대답과 함께 미리 준비해 둔 도움 (말이 없을 때 할 말 · 따라 말하기) */
+  pendingHelp: PendingHelp | null;
 }
 
 export class LessonHistoryError extends Error {}
@@ -35,12 +37,12 @@ export async function loadLesson(supabase: DB, lessonId: string): Promise<Loaded
   const [{ data: lesson }, { data: messages, error: messagesError }] = await Promise.all([
     supabase
       .from("lessons")
-      .select("id, status, level, turns, hints, sos, started_at, last_active_at, topic_id, lesson_plans(plan), call_topics(title_en, title_ko)")
+      .select("id, status, level, turns, hints, sos, started_at, last_active_at, topic_id, pending_help, lesson_plans(plan), call_topics(title_en, title_ko)")
       .eq("id", lessonId)
       .maybeSingle(),
     supabase
       .from("lesson_messages")
-      .select("role, text, ko, correction, counted")
+      .select("role, text, ko, correction, counted, kind")
       .eq("lesson_id", lessonId)
       .order("id"),
   ]);
@@ -65,6 +67,7 @@ export async function loadLesson(supabase: DB, lessonId: string): Promise<Loaded
     topicTitleKo: topic?.title_ko ?? "",
     plan,
     history: (messages ?? []) as ChatMessage[],
+    pendingHelp: (lesson.pending_help as PendingHelp | null) ?? null,
   };
 }
 

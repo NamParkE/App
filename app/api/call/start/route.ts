@@ -7,6 +7,7 @@ import { adminClient, MISSING_SERVICE_KEY } from "@/lib/supabase/admin";
 import { generatePlan } from "@/lib/call/claude";
 import { LESSON_USAGE_COST } from "@/lib/call/levels";
 import { closeStale, fail, saveOrLog, splitActive, type ActiveLessonRow } from "@/lib/call/server";
+import { WARMUP_HELP, warmupOpening } from "@/lib/call/rules";
 import type { LessonPlan, StartResponse } from "@/lib/call/types";
 
 export const maxDuration = 60;
@@ -26,7 +27,11 @@ export async function POST(request: Request) {
 
   // 프로필 · 주제 목록 · 최근 수업 · 진행 중인 수업을 한꺼번에
   const [{ data: profile }, { data: topics }, { data: recent }, { data: active }] = await Promise.all([
-    supabase.from("profiles").select("call_level, family_id").eq("id", userId).maybeSingle<{ call_level: number; family_id: string }>(),
+    supabase
+      .from("profiles")
+      .select("call_level, family_id, display_name")
+      .eq("id", userId)
+      .maybeSingle<{ call_level: number; family_id: string; display_name: string }>(),
     supabase.from("call_topics").select("*").order("sort").returns<TopicRow[]>(),
     supabase.from("lessons").select("topic_id, started_at").eq("user_id", userId).order("started_at", { ascending: false }).limit(40),
     supabase
@@ -95,7 +100,7 @@ export async function POST(request: Request) {
   // 수업은 서버 연결로 만든다 (user_id 는 로그인 정보에서). 계획은 위에서 사용자 연결로 읽어 가족 것임을 확인했다
   const { data: lesson, error } = await admin
     .from("lessons")
-    .insert({ user_id: userId, topic_id: topic.id, level, plan_id: plan.id })
+    .insert({ user_id: userId, topic_id: topic.id, level, plan_id: plan.id, pending_help: { help: WARMUP_HELP, repeat: null } })
     .select("id")
     .single();
   if (error || !lesson) {
@@ -103,7 +108,9 @@ export async function POST(request: Request) {
     return fail(500, "수업을 시작하지 못했어요.");
   }
 
-  const opening = { role: "tutor" as const, text: plan.plan.opening, ko: plan.plan.opening_ko, correction: null };
+  // 실제 전화영어처럼 인사 · 근황으로 시작한다 (오늘 주제는 대답 2번 뒤에. AI 호출 없이)
+  const warm = warmupOpening(profile.display_name ?? "");
+  const opening = { role: "tutor" as const, text: warm.text, ko: warm.ko, correction: null };
   // 첫 마디는 응답 전에 저장한다 (늦으면 첫 대답 때 선생님이 첫 질문을 몰라 다시 묻는다. 그래도 프롬프트가 계획의 첫 마디를 채운다)
   await saveOrLog(`opening (lesson ${lesson.id})`, () =>
     admin.from("lesson_messages").insert({ lesson_id: lesson.id, user_id: userId, role: "tutor", text: opening.text, ko: opening.ko }),
@@ -116,6 +123,7 @@ export async function POST(request: Request) {
   });
 
   const body: StartResponse = {
+    help: WARMUP_HELP,
     lessonId: lesson.id as string,
     topic: { id: topic.id, title_ko: topic.title_ko, title_en: topic.title_en },
     level,

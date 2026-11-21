@@ -39,6 +39,8 @@ export async function POST(request: Request) {
     : [{ role: "tutor" as const, text: lesson.plan.opening, ko: lesson.plan.opening_ko, correction: null }];
 
   const body: ResumeResponse = {
+    // 이어하기: 지난 대답 때 준비한 도움 말 · 따라 말하기 카드 (따라 말하기 연습은 다시 보여 주지 않고 건너뛴다)
+    help: lesson.pendingHelp?.help ?? null,
     lessonId: lesson.id,
     topic: { id: lesson.topicId, title_ko: lesson.topicTitleKo, title_en: lesson.topicTitle },
     level: lesson.level,

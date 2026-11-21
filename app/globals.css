@@ -2995,3 +2995,136 @@ html {
   color: var(--accent);
   font-weight: 700;
 }
+
+/* ───── 전화영어 코칭: 수업 단계 · 리피가 먼저 도와주기 · 따라 말하기 ───── */
+.call-stages {
+  list-style: none;
+  margin: 0;
+  padding: 8px 16px 10px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+}
+.call-stages li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--muted);
+  text-align: center;
+}
+.call-stages li i {
+  display: block;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.call-stages li.done i {
+  background: var(--dark-fill);
+}
+.call-stages li.now {
+  color: var(--accent-ink);
+  font-weight: 700;
+}
+.call-stages li.now i {
+  background: var(--accent);
+}
+.msg.tutor.help .msg-bubble {
+  background: #f3f6fe;
+  border: 2px solid var(--accent);
+  padding: 11px 13px;
+}
+.help-tag {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-ink);
+}
+.choice-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.choice-chip {
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  color: var(--accent-ink);
+  font-weight: 700;
+  font-size: 15px;
+}
+.starter-box {
+  display: block;
+  background: var(--surface);
+  border: 1px dashed var(--accent);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.starter-blank {
+  display: inline-block;
+  width: 64px;
+  height: 1em;
+  border-bottom: 2px solid var(--accent);
+  margin: 0 4px;
+  vertical-align: baseline;
+}
+.repeat-card {
+  align-self: stretch;
+  background: var(--dark);
+  color: #fff;
+  border-radius: 18px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.repeat-card .lab {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--dark-muted);
+}
+.repeat-card .sen {
+  font-size: 17px;
+  font-weight: 600;
+  line-height: 1.45;
+}
+.repeat-card .ko {
+  font-size: 13px;
+  color: var(--dark-muted);
+}
+.repeat-card .listen {
+  align-self: flex-start;
+  min-height: 36px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #4a5260;
+  background: transparent;
+  color: #fff;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.repeat-chip {
+  align-self: flex-end;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--accent-ink);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+.repeat-chip.ok {
+  color: var(--ok-ink);
+  background: var(--ok-soft);
+}
+.best-card {
+  align-self: stretch;
+  gap: 6px;
+}

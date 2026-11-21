@@ -7,11 +7,17 @@ import { useBackOverride } from "@/lib/back";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { canListen, getSavedRate, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
-import { callLevel, LESSON_TURNS, LESSON_USAGE_COST, MAX_HINTS, MAX_SOS, MIN_TURNS_FOR_REPORT } from "@/lib/call/levels";
+import { callLevel, HELP_WAIT_MS, LESSON_TURNS, LESSON_USAGE_COST, MAX_HINTS, MAX_SOS, MIN_TURNS_FOR_REPORT } from "@/lib/call/levels";
+import { stageOf } from "@/lib/call/rules";
+import { compareSentences } from "@/lib/diff";
 import type {
   ChatMessage,
   EndResponse,
+  HelpLines,
   HintResponse,
+  LessonStage,
+  RepeatCard,
+  RepeatResponse,
   PlanExpression,
   ResumeResponse,
   ReviewItem,
@@ -40,6 +46,32 @@ interface Shown extends ChatMessage {
   showKo: boolean;
   /** "한국어로 묻기"로 한 말 (화면에만 보이고 서버 대화에는 없다) */
   sos?: boolean;
+  /** 따라 말하기 결과 (학생 말 아래 칩) */
+  repeatResult?: { passed: boolean };
+  /** 마지막 인사 뒤 "오늘 가장 잘 말한 문장" 카드 */
+  best?: boolean;
+}
+
+const STAGES: { id: LessonStage; label: string }[] = [
+  { id: "warmup", label: "인사" },
+  { id: "topic", label: "주제 대화" },
+  { id: "repeat", label: "따라 말하기" },
+  { id: "wrapup", label: "마무리" },
+];
+
+/** "Today it is ___." → 빈칸을 밑줄 칸으로 */
+function StarterText({ text }: { text: string }) {
+  const parts = text.split(/_{2,}/);
+  return (
+    <span className="starter-box en" lang="en">
+      {parts.map((p, i) => (
+        <span key={i}>
+          {p}
+          {i < parts.length - 1 && <span className="starter-blank" aria-label="빈칸" />}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 const MIC_ERRORS: Record<string, string> = {
@@ -120,6 +152,14 @@ export default function CallSession({
   const finished = useRef(false);
   /** 이어하기: 통화 시작 때 보여 줄 지금까지의 대화 */
   const resumed = useRef<ChatMessage[] | null>(null);
+  // ───── 리피가 먼저 도와주기 (말이 없을 때 8초 → 고르기, 10초 더 → 첫마디) ─────
+  const helpRef = useRef<HelpLines | null>(null);
+  const helpStep = useRef(0);
+  const helpTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const micRef = useRef<Mic>("idle");
+  const [repeat, setRepeat] = useState<RepeatCard | null>(null);
+  const repeatRef = useRef<RepeatCard | null>(null);
+  const [done, setDone] = useState(false);
 
   // 어린이 모드에서는 리피가 더 천천히 말한다 (직접 고른 속도가 있으면 그대로)
   const rate = useCallback(() => getSavedRate() ?? (kids ? Math.min(L.rate, 0.75) : L.rate), [L.rate, kids]);
@@ -136,6 +176,40 @@ export default function CallSession({
       if (confirmTimer.current) clearTimeout(confirmTimer.current);
     };
   }, []);
+
+  useEffect(() => {
+    micRef.current = mic;
+  }, [mic]);
+  useEffect(() => {
+    repeatRef.current = repeat;
+  }, [repeat]);
+  useEffect(() => () => clearHelpTimer(), []);
+
+  function clearHelpTimer() {
+    if (helpTimer.current) clearTimeout(helpTimer.current);
+    helpTimer.current = null;
+  }
+
+  /** 리피 말이 끝난 뒤 말이 없으면 다음 단계 도움을 예약한다 */
+  function armHelp() {
+    clearHelpTimer();
+    const step = helpStep.current;
+    if (!helpRef.current || step >= 2 || finished.current || repeatRef.current?.mode === "practice") return;
+    helpTimer.current = setTimeout(() => showHelp(step + 1), HELP_WAIT_MS[step]);
+  }
+
+  function showHelp(step: number) {
+    const h = helpRef.current;
+    if (!h || micRef.current !== "idle" || finished.current) return;
+    helpStep.current = step;
+    playSfx("chirp");
+    const m =
+      step === 1
+        ? addMessage({ role: "tutor", text: h.choice, ko: h.choice_ko, kind: "help", choices: h.choices, emotion: "comfort" })
+        : addMessage({ role: "tutor", text: h.starter_line, ko: h.starter_ko, kind: "help", starter: h.starter, emotion: "comfort" });
+    const spoken = step === 1 ? h.choice : `${h.starter_line} ${h.starter.replace(/_{2,}/g, "...")}`;
+    sayTutor({ ...m, text: spoken }, armHelp);
+  }
 
   // 통화 중 휴대폰 뒤로가기: 바로 나가지 않고 "통화를 끝낼까요?" (열린 창이 있으면 그 창을 닫는다)
   useBackOverride(phase === "call", () => {
@@ -223,12 +297,16 @@ export default function CallSession({
         if (m.role === "tutor") last = shown;
       }
       const lastShown = last;
-      if (lastShown) setTimeout(() => sayTutor(lastShown), 650);
+      helpRef.current = lesson.help ?? null;
+      helpStep.current = 0;
+      if (lastShown) setTimeout(() => sayTutor(lastShown, armHelp), 650);
       return;
     }
     const first = addMessage({ ...lesson.opening, emotion: "happy" });
+    helpRef.current = lesson.help ?? null;
+    helpStep.current = 0;
     // 전화 연결음이 끝난 뒤 리피가 말한다
-    setTimeout(() => sayTutor(first), 650);
+    setTimeout(() => sayTutor(first, armHelp), 650);
   }
 
   // ───── 수업 끝내기 → 리포트 ─────
@@ -236,6 +314,7 @@ export default function CallSession({
     async (expectedTurns: number) => {
       if (!lesson || finished.current) return;
       finished.current = true;
+      clearHelpTimer();
       listener.current?.abort();
       playSfx("hangup");
       setPhase("ending");
@@ -266,9 +345,14 @@ export default function CallSession({
     setSos(null);
     setSkipNote(false);
     setCallError(null);
+    clearHelpTimer();
+    // 7번째 대답(따라 말하기 단계): 따라 말한 정도를 바로 보여 준다 (단어 비교, AI 없음)
+    const stageCard = repeatRef.current?.mode === "stage" ? repeatRef.current : null;
+    const passedStage = stageCard ? compareSentences(stageCard.sentence, said).score >= 70 : undefined;
     const mine = addMessage({ role: "user", text: said });
     setPartial("");
-    const r = await post<TurnResponse>("/api/call/turn", { lessonId: lesson.lessonId, said, kids });
+    const helpShown = helpStep.current;
+    const r = await post<TurnResponse>("/api/call/turn", { lessonId: lesson.lessonId, said, kids, helpShown });
     if (!r.ok) {
       // 내 말풍선은 남기고, 다시 말할 수 있게 한다
       setCallError(r.message);
@@ -277,16 +361,50 @@ export default function CallSession({
       return;
     }
     setTurns(r.data.turns);
+    setDone(r.data.done);
+    helpStep.current = 0;
+    helpRef.current = r.data.help;
+    setRepeat(r.data.repeat);
+    repeatRef.current = r.data.repeat;
+    if (stageCard && r.data.counted) {
+      setMessages((list) => list.map((m) => (m.id === mine.id ? { ...m, repeatResult: { passed: !!passedStage } } : m)));
+    }
     if (!r.data.counted) {
       setMessages((list) => list.map((m) => (m.id === mine.id ? { ...m, counted: false } : m)));
       setSkipNote(true);
     }
     const shown = addMessage(r.data.reply);
+    if (r.data.best) addMessage({ role: "tutor", text: r.data.best, best: true } as ChatMessage & { best: boolean });
     setMic("idle");
-    // 짹짹 소리로 대답 도착을 알리고, 이어서 리피가 말한다. 마지막 대답이면 인사가 끝난 뒤 리포트로
+    // 짹짹 소리로 대답 도착을 알리고, 이어서 리피가 말한다. 마지막 대답이면 인사가 끝난 뒤 리포트로, 아니면 말이 없을 때 도움을 예약
     playSfx("chirp");
-    setTimeout(() => sayTutor(shown, r.data.done ? () => void end(r.data.turns) : undefined), 220);
+    setTimeout(() => sayTutor(shown, r.data.done ? () => void end(r.data.turns) : armHelp), 220);
     if (r.data.done) setTimeout(() => void end(r.data.turns), 15000); // 소리가 안 나는 기기 대비
+  }
+
+  // ───── 따라 말하기 연습 (대답 수에 넣지 않음, AI 없음) ─────
+  async function sendRepeat(said: string, skip = false) {
+    if (!lesson) return;
+    clearHelpTimer();
+    setCallError(null);
+    setMic("waiting");
+    const mine = skip ? null : addMessage({ role: "user", text: said, kind: "repeat", counted: false });
+    setPartial("");
+    const r = await post<RepeatResponse>("/api/call/repeat", { lessonId: lesson.lessonId, said, skip });
+    if (!r.ok) {
+      setCallError(r.message);
+      if (mine) setMessages((list) => list.filter((m) => m.id !== mine.id));
+      setMic("idle");
+      return;
+    }
+    if (mine) setMessages((list) => list.map((m) => (m.id === mine.id ? { ...m, repeatResult: { passed: r.data.passed } } : m)));
+    setRepeat(null);
+    repeatRef.current = null;
+    helpStep.current = 0;
+    const shown = addMessage(r.data.reply);
+    setMic("idle");
+    playSfx(r.data.passed ? "good" : "chirp");
+    setTimeout(() => sayTutor(shown, armHelp), 220);
   }
 
   function onMic(korean?: boolean) {
@@ -305,6 +423,7 @@ export default function CallSession({
   }
 
   function startRecording(ko: boolean) {
+    clearHelpTimer();
     stopSpeaking();
     setSpeakingId(null);
     setCallError(null);
@@ -322,6 +441,10 @@ export default function CallSession({
         }
         if (ko) {
           void askSos(text.trim());
+          return;
+        }
+        if (repeatRef.current?.mode === "practice") {
+          void sendRepeat(text.trim());
           return;
         }
         // 바로 보내지 않고 3초 동안 보여 준다. 그 사이 "다시 말하기"로 취소할 수 있다
@@ -367,6 +490,7 @@ export default function CallSession({
 
   // ───── 한국어로 묻기 (대답 수에는 넣지 않는다) ─────
   async function askSos(said: string) {
+    clearHelpTimer();
     if (!lesson) return;
     setMic("waiting");
     setSosBusy(true);
@@ -395,6 +519,7 @@ export default function CallSession({
 
   async function askHint() {
     if (!lesson || hintBusy || hintsLeft <= 0) return;
+    clearHelpTimer();
     setHintBusy(true);
     const r = await post<HintResponse>("/api/call/hint", { lessonId: lesson.lessonId, kids });
     setHintBusy(false);
@@ -407,7 +532,7 @@ export default function CallSession({
     setHintsLeft(r.data.hintsLeft);
   }
 
-  const lastTutor = [...messages].reverse().find((m) => m.role === "tutor");
+  const lastTutor = [...messages].reverse().find((m) => m.role === "tutor" && !m.best);
   const headMood: ReppyMood = speakingId !== null ? "talk" : mic === "waiting" || phase === "ending" ? "think" : "idle";
 
   /** 자막과 한글 뜻을 함께 켜고 끈다 */
@@ -611,11 +736,29 @@ export default function CallSession({
             끝내기
           </button>
         </header>
+        <ol className="call-stages" aria-label="수업 단계">
+          {STAGES.map((st) => {
+            const now: LessonStage = done ? "wrapup" : stageOf(Math.min(turns + 1, LESSON_TURNS));
+            const order = STAGES.findIndex((x) => x.id === now);
+            const i = STAGES.findIndex((x) => x.id === st.id);
+            return (
+              <li key={st.id} className={i < order ? "done" : i === order ? "now" : undefined} aria-current={i === order ? "step" : undefined}>
+                <i aria-hidden="true" />
+                {st.label}
+              </li>
+            );
+          })}
+        </ol>
 
         <div className="chat" aria-live="polite">
           {messages.map((m) =>
-            m.role === "tutor" ? (
-              <div key={m.id} className={`msg tutor${speakingId === m.id ? " speaking" : ""}`}>
+            m.best ? (
+              <section key={m.id} className="card best-card" aria-label="오늘 가장 잘 말한 문장">
+                <span className="label">오늘 가장 잘 말한 문장</span>
+                <span className="en" lang="en" style={{ fontSize: 15, fontWeight: 600 }}>{m.text}</span>
+              </section>
+            ) : m.role === "tutor" ? (
+              <div key={m.id} className={`msg tutor${speakingId === m.id ? " speaking" : ""}${m.kind === "help" ? " help" : ""}`}>
                 {/* 말풍선을 누르면 다시 듣기 */}
                 <button type="button" className="msg-bubble bubble-btn" onClick={() => sayTutor(m)} aria-label="리피 말 다시 듣기">
                   {speakingId === m.id && (
@@ -623,6 +766,7 @@ export default function CallSession({
                       <SpeakerIcon size={14} /> 말하는 중
                     </span>
                   )}
+                  {m.kind === "help" && <span className="help-tag">리피가 도와줘요</span>}
                   {m.showText ? (
                     <span className="en" lang="en">{m.text}</span>
                   ) : (
@@ -632,7 +776,17 @@ export default function CallSession({
                     </span>
                   )}
                   {m.showKo && m.ko && <span className="ko-line" style={{ fontSize: 14 }}>{m.ko}</span>}
+                  {m.starter && <StarterText text={m.starter} />}
                 </button>
+                {m.choices && m.choices.length > 0 && (
+                  <div className="choice-row">
+                    {m.choices.map((c) => (
+                      <button key={c} type="button" className="choice-chip en" lang="en" onClick={() => speak(c, { rate: rate() })} aria-label={`${c} 듣기`}>
+                        {c}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <div className="msg-tools">
                   <button type="button" onClick={() => toggleSub(m.id)}>
                     {m.showText && (m.showKo || !m.ko) ? "자막 · 뜻 숨기기" : "자막 · 뜻 보기"}
@@ -646,16 +800,31 @@ export default function CallSession({
                 )}
               </div>
             ) : (
-              <div key={m.id} className={`msg user${m.sos ? " sos" : ""}${m.counted === false ? " skipped" : ""}`}>
+              <div key={m.id} className={`msg user${m.sos ? " sos" : ""}${m.counted === false && m.kind !== "repeat" ? " skipped" : ""}`}>
                 {m.sos && <div className="msg-label">한국어로 물었어요</div>}
                 <div className={`msg-bubble${m.sos ? "" : " en"}`} lang={m.sos ? "ko" : "en"}>{m.text}</div>
-                {m.counted === false && (
+                {m.repeatResult && (
+                  <div className={`repeat-chip${m.repeatResult.passed ? " ok" : ""}`}>
+                    {m.repeatResult.passed ? "따라 말하기 성공 · 거의 똑같아요" : "좋은 시도예요 · 다음엔 더 비슷하게"}
+                  </div>
+                )}
+                {m.counted === false && m.kind !== "repeat" && (
                   <div className="skip-chip">
                     <InfoIcon /> 대답 수에 넣지 않았어요
                   </div>
                 )}
               </div>
             ),
+          )}
+          {repeat && mic !== "waiting" && (
+            <section className="repeat-card" aria-label="따라 말해 볼까요?">
+              <span className="lab">따라 말해 볼까요?</span>
+              <span className="sen en" lang="en">{repeat.sentence}</span>
+              {repeat.ko && <span className="ko">{repeat.ko}</span>}
+              <button type="button" className="listen" onClick={() => speak(repeat.sentence, { rate: rate() })}>
+                <SpeakerIcon size={14} /> 다시 듣기
+              </button>
+            </section>
           )}
           {mic === "rec" && (
             <div className="msg user">
@@ -740,15 +909,29 @@ export default function CallSession({
 
         <div className="call-controls">
           <div className="mic-row">
-            <button
-              type="button"
-              className="help-btn"
-              onClick={() => setHelpOpen(true)}
-              disabled={phase === "ending" || mic === "rec" || mic === "waiting"}
-              aria-haspopup="dialog"
-            >
-              <HelpIcon size={18} /> 도움
-            </button>
+            {repeat?.mode === "practice" ? (
+              <button
+                type="button"
+                className="help-btn"
+                onClick={() => void sendRepeat("", true)}
+                disabled={phase === "ending" || mic === "rec" || mic === "waiting"}
+              >
+                건너뛰기
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="help-btn"
+                onClick={() => {
+                  clearHelpTimer();
+                  setHelpOpen(true);
+                }}
+                disabled={phase === "ending" || mic === "rec" || mic === "waiting"}
+                aria-haspopup="dialog"
+              >
+                <HelpIcon size={18} /> 도움
+              </button>
+            )}
           <button
             type="button"
             className={`mic${mic === "rec" ? " rec" : ""}${mic === "waiting" ? " thinking" : ""}`}
@@ -779,7 +962,9 @@ export default function CallSession({
                   ? "잘못 말했으면 '다시 말하기'를 누르세요"
                 : mic === "waiting"
                   ? "리피가 대답을 준비하고 있어요"
-                  : "리피 말이 끝나면 버튼을 누르고 대답하세요"}
+                  : repeat
+                    ? "버튼을 누르고 따라 말해 보세요"
+                    : "리피 말이 끝나면 버튼을 누르고 대답하세요"}
           </div>
         </div>
         {helpOpen && (
