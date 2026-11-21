@@ -3,7 +3,8 @@
 -- 맨 끝의 rollback 으로 이 점검이 만든 변경은 모두 되돌아갑니다 (운영 데이터는 바뀌지 않음).
 -- 결과는 맨 아래 표 하나로 나옵니다. ok 칸이 모두 true 면 통과입니다.
 --
--- 테스트 계정: 아래 test_email 을 테스트용 계정 이메일로 바꾸세요 (그 계정의 프로필이 있어야 합니다).
+-- 테스트 계정: 아무것도 고치지 않으면 운영자로 등록된 이메일(operator_emails, 관리자 계정)로 점검합니다.
+-- 다른 계정으로 하려면 아래 test_email 의 빈 따옴표 '' 사이에 이메일을 넣으세요 (따옴표는 키보드의 ' 그대로).
 
 begin;
 
@@ -11,7 +12,7 @@ create temp table _check (step int, item text, ok boolean, detail text) on commi
 
 do $$
 declare
-  test_email text := 'test@example.com';   -- ← 테스트 계정 이메일
+  test_email text := '';   -- 비워 두면 운영자 이메일
   v_uid uuid;
   v_topic text;
   v_before text;
@@ -32,9 +33,12 @@ begin
     return;
   end if;
 
+  if coalesce(btrim(test_email), '') = '' then
+    select email into test_email from public.operator_emails order by email limit 1;
+  end if;
   select u.id into v_uid from auth.users u join public.profiles p on p.id = u.id where lower(u.email) = lower(test_email);
   if v_uid is null then
-    insert into _check values (2, '롤백 점검', false, '테스트 계정(' || test_email || ')의 프로필을 찾지 못했어요');
+    insert into _check values (2, '롤백 점검', false, '테스트 계정(' || coalesce(test_email, '운영자 이메일 없음') || ')의 프로필을 찾지 못했어요');
     return;
   end if;
   select id into v_topic from public.topics order by sort limit 1;
