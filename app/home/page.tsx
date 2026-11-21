@@ -11,6 +11,8 @@ import { allProgress, progressFor, progressOne, SENTENCE_COUNT } from "@/lib/pro
 import { CATEGORIES, one, type AnswerSource, type Category, type Level, type Topic } from "@/lib/types";
 import { closeStale, splitActive, type ActiveLessonRow } from "@/lib/call/server";
 import { adminClient } from "@/lib/supabase/admin";
+import { countByTopic, pickDue, RECALL_SESSION } from "@/lib/recall";
+import { dueRecallRows } from "@/lib/recallServer";
 
 export default async function HomePage({ searchParams }: { searchParams: Promise<{ cat?: string }> }) {
   const { cat } = await searchParams;
@@ -19,7 +21,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
 
   // 서로 기다릴 필요가 없는 조회를 한꺼번에 보낸다 (DB 왕복 1번).
   // 학습 스타일을 몰라도 되도록 두 모드에 필요한 조회를 모두 함께 보낸다 (작은 조회라 동시에 보내는 편이 빠르다).
-  const [rawProfile, { data: topics }, progressRows, used, { data: last }, streak, { data: callTopics }, { data: lessons }, { count: dueCount }, { data: active }] =
+  const [rawProfile, { data: topics }, progressRows, used, { data: last }, streak, { data: callTopics }, { data: lessons }, { count: dueCount }, { data: active }, recallRows] =
     await Promise.all([
       fetchProfile(supabase, userId),
       supabase.from("topics").select("*").order("sort").returns<Topic[]>(),
@@ -53,6 +55,7 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         .eq("user_id", userId)
         .eq("status", "active")
         .returns<ActiveLessonRow[]>(),
+      dueRecallRows(supabase, userId),
     ]);
   // 끊긴 통화: 30분 안이면 이어하기 카드, 지난 것은 응답 뒤에 닫는다 (대답 0번이면 환불)
   const { resumable, stale } = splitActive(active ?? []);
@@ -118,6 +121,15 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
         : `/topic/${todayItem.id}`;
   const catLabel = (c: Category) => CATEGORIES.find((x) => x.id === c)?.label ?? "";
 
+  // 오늘의 복습: 복습할 외운 문장이 있으면 "오늘 할 것" 자리에 먼저 (원래 카드는 아래로 작게)
+  const recall = pickDue(recallRows, profile.level);
+  const recallSummary = countByTopic(recall)
+    .slice(0, 3)
+    .map((t) => `${topics?.find((x) => x.id === t.topicId)?.title_ko ?? t.topicId} ${t.count}`)
+    .join(" · ");
+  const recallNow = Math.min(recall.length, RECALL_SESSION);
+  const recallMinutes = Math.max(1, Math.round((recallNow * 20) / 60));
+
   const memorizeView = (
     <main className="screen">
       <div className="pad">
@@ -132,7 +144,38 @@ export default async function HomePage({ searchParams }: { searchParams: Promise
           <StreakChip streak={streak.streak} studiedToday={streak.studiedToday} />
         </div>
 
-        {todayItem ? (
+        {recall.length > 0 && (
+          <section className="hero-card" aria-label="오늘의 복습">
+            <span className="sub">오늘의 복습 · 외운 문장 다시 말하기</span>
+            <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+              <span style={{ fontSize: 22, fontWeight: 700 }}>
+                {recall.length > RECALL_SESSION ? `${recall.length}문장 중 ${recallNow}문장부터` : `${recall.length}문장 복습할 차례예요`}
+              </span>
+              <span className="sub" style={{ fontSize: 14 }}>
+                {recallSummary} · 약 {recallMinutes}분
+              </span>
+            </div>
+            <Link href="/recall" className="btn btn-primary">
+              <MicIcon size={20} color="#FFFFFF" />
+              복습 시작
+            </Link>
+            <span className="sub" style={{ fontSize: 12, textAlign: "center" }}>한글 뜻만 보고 영어로 말해요 · 연습 횟수는 차감하지 않아요</span>
+          </section>
+        )}
+
+        {recall.length > 0 && todayItem ? (
+          <Link href={todayHref} className="card" style={{ gap: 4, textDecoration: "none", color: "inherit" }} aria-label={`그다음 할 것: ${todayItem.title_ko}`}>
+            <span className="label">
+              그다음 · {continuing ? "이어서 하기" : todayHas ? "다음 주제" : "새 주제"} · {catLabel(todayItem.category)}
+            </span>
+            <span style={{ fontSize: 16, fontWeight: 700 }}>{todayItem.title_ko}</span>
+            <span className="muted" style={{ fontSize: 13 }}>
+              {todayHas
+                ? `${todayTotal}문장 중 ${todayDone}문장 외움${continuing && lastPos !== undefined ? ` · 문장 ${lastPos + 1}부터` : ""}`
+                : "답변을 준비하고 연습을 시작해요"}
+            </span>
+          </Link>
+        ) : recall.length > 0 ? null : todayItem ? (
           <section className="hero-card" aria-label="오늘 할 것">
             <span className="sub">
               {continuing ? "이어서 하기" : todayHas ? "다음 주제" : "새 주제"} · {catLabel(todayItem.category)}

@@ -2,6 +2,7 @@
 
 - 확정일: 2026-11-21 (interview-me 인터뷰로 사용자 확인 완료)
 - 흐름 미리 보기(결정용 스케치): https://claude.ai/artifact/EaGqNrYhT5u4LJjPj9yPt8 (①②③ 판)
+- 상세 화면 시안 (2026-11-21 승인): https://claude.ai/artifact/YAsudxUcgYs2wp6iGKP9mS · 설계: [`docs/design/opic-exam-prep.md`](../design/opic-exam-prep.md)
 - 관련: [`english-opic-app.md`](english-opic-app.md), [`my-script-mode.md`](my-script-mode.md)
 
 ## 목표 (Why)

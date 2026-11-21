@@ -6,7 +6,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CheckIcon, ChevronIcon, CloseIcon, MicIcon, ReplayIcon, SlidersIcon, SpeakerIcon, SpinnerIcon } from "@/components/Icons";
 import { canListen, listen, speak, stopSpeaking, type Listener } from "@/lib/speech";
 import RateControl from "@/components/RateControl";
-import type { Token } from "@/lib/diff";
+import Words from "@/components/Words";
 import type { AnswerSource, FeedbackResponse, Mode, Sentence, SentenceStatus, Topic } from "@/lib/types";
 
 type Phase = "ready" | "rec" | "thinking" | "result" | "finished";
@@ -23,22 +23,6 @@ const MIC_ERRORS: Record<string, string> = {
   "audio-capture": "마이크를 찾을 수 없어요.",
   network: "음성 인식에 인터넷 연결이 필요해요.",
 };
-
-function Words({ tokens }: { tokens: Token[] }) {
-  return (
-    <div className="words" lang="en">
-      {tokens.map((t, i) =>
-        t.status === "gap" ? (
-          <span key={i} className="w-gap" role="img" aria-label="빠뜨린 자리" />
-        ) : (
-          <span key={i} className={t.status === "ok" ? undefined : `w-${t.status}`}>
-            {t.text}
-          </span>
-        ),
-      )}
-    </div>
-  );
-}
 
 // "**the** living room" → 굵은 영어 단어
 function TipText({ text }: { text: string }) {
