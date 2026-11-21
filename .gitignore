@@ -10,3 +10,6 @@ android/.gradle
 android/build
 android/app/build
 android/local.properties
+
+# Next.js 개발 서버가 자동으로 만드는 AI 도구 안내 파일
+AGENTS.md
