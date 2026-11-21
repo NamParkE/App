@@ -2991,3 +2991,7 @@ html {
   font-size: 15px;
   font-weight: 400;
 }
+.seg-add {
+  color: var(--accent);
+  font-weight: 700;
+}

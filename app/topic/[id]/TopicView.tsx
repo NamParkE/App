@@ -85,16 +85,15 @@ export default function TopicView({
           <h1>{topic.title_ko}</h1>
         </div>
 
-        {hasAi && hasMine && (
-          <div className="seg" role="tablist" aria-label="연습할 답변">
-            <button type="button" role="tab" aria-selected={view === "mine"} onClick={() => switchTo("mine")}>
-              내 스크립트
-            </button>
-            <button type="button" role="tab" aria-selected={view === "ai"} onClick={() => switchTo("ai")}>
-              AI 답변 · <span className="en">{level}</span>
-            </button>
-          </div>
-        )}
+        {/* "내 스크립트 | AI 답변" 전환은 항상 보인다 (사용자 피드백: 스크립트 넣기가 잘 안 보임) */}
+        <div className="seg" role="tablist" aria-label="연습할 답변">
+          <button type="button" role="tab" aria-selected={view === "mine"} onClick={() => switchTo("mine")}>
+            내 스크립트{!hasMine && <span className="seg-add"> + 넣기</span>}
+          </button>
+          <button type="button" role="tab" aria-selected={view === "ai"} onClick={() => switchTo("ai")}>
+            AI 답변 · <span className="en">{level}</span>
+          </button>
+        </div>
 
         <button type="button" className="card q-card" onClick={() => speak(topic.question_en)} aria-label="질문 듣기">
           <span className="row" style={{ alignItems: "center" }}>
@@ -150,9 +149,9 @@ export default function TopicView({
                 );
               })}
             </ol>
-            {(view === "mine" || !hasMine) && (
-              <Link href={scriptHref} className="text-link">
-                {view === "mine" ? "스크립트 다시 넣기" : "내 스크립트도 넣기"}
+            {view === "mine" && (
+              <Link href={scriptHref} className="btn btn-outline" style={{ height: 48, fontSize: 15, fontWeight: 400 }}>
+                스크립트 다시 넣기
               </Link>
             )}
           </>
@@ -185,9 +184,9 @@ export default function TopicView({
                 "핵심 답변 만들기"
               )}
             </button>
-            <Link href={hasMine ? `/topic/${topic.id}?v=mine` : scriptHref} className="text-link" onClick={hasMine ? () => setView("mine") : undefined}>
+            <button type="button" className="text-link" onClick={() => switchTo("mine")}>
               {hasMine ? "내 스크립트로 연습하기" : "내 스크립트가 있어요 · 직접 넣기"}
-            </Link>
+            </button>
           </>
         )}
       </div>
