@@ -71,7 +71,7 @@ export async function POST(request: Request) {
   if (!plan) {
     let generated: LessonPlan;
     try {
-      generated = await generatePlan(topic, level);
+      generated = await generatePlan(topic, level, userId);
     } catch (e) {
       console.error("plan failed", e);
       await refundCharge(supabase, charge.ticket);

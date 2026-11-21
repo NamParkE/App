@@ -43,7 +43,7 @@ export async function POST(request: Request) {
 
   let generated;
   try {
-    generated = await generateSentences(topic, profile.level);
+    generated = await generateSentences(topic, profile.level, userId);
   } catch (e) {
     await refundCharge(supabase, charge.ticket);
     console.error("generate failed", e);

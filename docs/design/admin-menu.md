@@ -2,7 +2,7 @@
 
 - 의도: [`docs/intent/admin-menu.md`](../intent/admin-menu.md)
 - 화면 시안: https://claude.ai/artifact/5ut7shZX5n9oWsHJpNo3A2 (화면 5개, 숫자는 모두 예시)
-- 상태: **초안. 승인 전에는 구현하지 않는다.**
+- 상태: **승인됨 (2026-11-21), 구현 완료.** §8의 결정은 제안대로 승인됨. DB: `supabase/migrations/0008_admin.sql`
 
 ## 1. 한눈에 보기
 

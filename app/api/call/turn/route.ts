@@ -38,6 +38,7 @@ export async function POST(request: Request) {
   let out;
   try {
     out = await tutorTurn({
+      userId,
       level: lesson.level,
       topicTitle: lesson.topicTitle,
       plan: lesson.plan,

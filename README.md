@@ -26,19 +26,24 @@
 - **오픽 암기형의 AI 호출은 두 가지뿐입니다:** 주제별 답변 만들기(주제·등급마다 한 번만 하고 저장)와 틀린 문장의 코치 한마디. 다 맞게 말하면 AI를 부르지 않습니다.
 - **전화영어 수업은 시작할 때 사용량 5회를 차감**하고, 수업 중 대화·힌트·리포트는 추가로 차감하지 않습니다 (수업 1회 Haiku 기준 약 7원). 수업 계획은 주제·레벨마다 한 번 만들어 가족이 함께 씁니다.
 - **사용자마다 하루 한도가 있습니다:** 기본 30회이고 한국 시간 자정에 다시 채워집니다. 한도를 다 쓰면 단어 비교 결과만 보여 줍니다.
-- **모델:** 기본은 `claude-haiku-5-5`입니다. 대략적인 추정으로, 가족 4명이 매일 한도를 다 쓰면(월 3,600회) 월 수천 원 수준입니다. 품질을 더 높이려면 `CLAUDE_MODEL=claude-opus-5-5`로 바꿀 수 있지만 비용이 약 40배라 월 수만 원이 될 수 있습니다. 실제 사용량은 Anthropic 콘솔에서 확인하세요.
+- **모델:** 기본은 `claude-haiku-5-5`입니다. 대략적인 추정으로, 가족 4명이 매일 한도를 다 쓰면(월 3,600회) 월 수천 원 수준입니다. 품질을 더 높이려면 `CLAUDE_MODEL=claude-opus-5-5`로 바꿀 수 있지만 비용이 약 40배라 월 수만 원이 될 수 있습니다. 운영자 메뉴(내 정보 → 운영자 메뉴)에서 이번 달 AI 비용 추정치를 볼 수 있고, 정확한 청구액은 Anthropic 콘솔에서 확인하세요.
+- **운영자 메뉴:** 운영자로 등록한 계정만 열 수 있습니다. 모든 가족의 AI 비용, 학습한 사람, 한도를 다 쓴 사람, 모드별 사용량을 보고 사람마다 하루 한도(0~200회)를 바꿉니다. 숫자만 보이고 대화·문장 내용은 보이지 않습니다. 설계: [`docs/design/admin-menu.md`](docs/design/admin-menu.md)
 
 ## 처음 설정하기 (한 번만)
 
 ### 1. Supabase
 
 1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 지역은 Northeast Asia (Seoul)를 추천합니다.
-2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql` → `0005_call_exceptions.sql` → `0006_refund_lockdown.sql` → `0007_server_writes.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
+2. **SQL Editor**에서 [`supabase/migrations/`](supabase/migrations/)의 파일을 번호 순서대로(`0001_init.sql` → `0002_grants.sql` → `0003_more_topics.sql` → `0004_call_mode.sql` → `0005_call_exceptions.sql` → `0006_refund_lockdown.sql` → `0007_server_writes.sql` → `0008_admin.sql`) 하나씩 통째로 붙여 넣고 실행합니다.
 3. 같은 곳에서 관리자(가족 계정을 만들 사람) 이메일을 등록합니다.
    ```sql
    insert into public.owner_emails (email) values ('관리자@gmail.com');
    ```
    이 이메일만 "새 가족 만들기"를 할 수 있고, 나머지 가족은 초대 코드로만 들어옵니다. 모르는 사람이 로그인해도 API를 쓸 수 없습니다.
+   운영자 메뉴를 쓸 계정(서비스 운영자 한 명)은 따로 등록합니다. `owner_emails`와 달리, 여기 넣은 계정은 **모든 가족**의 숫자를 볼 수 있습니다.
+   ```sql
+   insert into public.operator_emails (email) values ('운영자@gmail.com');
+   ```
 4. 로그인은 **이메일 + 비밀번호**입니다. Authentication → Providers → **Email**이 켜져 있으면 됩니다 (기본값). 처음 가입할 때 한 번 확인 메일이 갑니다.
    - (선택) Google 로그인: **Providers → Google**을 켜고 Google Cloud 콘솔의 OAuth 클라이언트 ID·Secret을 넣은 뒤, Vercel 환경 변수 `NEXT_PUBLIC_GOOGLE_LOGIN=on`을 추가하고 다시 배포하면 로그인 화면에 버튼이 나타납니다.
 5. **Authentication → URL Configuration**
@@ -57,6 +62,7 @@
    - `SUPABASE_SERVICE_ROLE_KEY`: Supabase → Project Settings → API의 `service_role` 키. 수업 기록 · 학습 점수처럼 사용자가 직접 고치면 안 되는 기록을 서버가 쓸 때만 씁니다. **`NEXT_PUBLIC_`을 붙이지 마세요** (붙이면 브라우저로 나갑니다). 없으면 전화영어 수업이 시작되지 않습니다.
    - `ANTHROPIC_API_KEY`: Anthropic 콘솔에서 발급. 서버에서만 쓰이고 브라우저로 나가지 않습니다.
    - `CLAUDE_MODEL`: `claude-haiku-5-5` (비워 두어도 Haiku를 씁니다)
+   - `KRW_PER_USD`: (선택) 운영자 메뉴에서 AI 비용을 원화로 바꿀 때 쓰는 환율. 비워 두면 1,400입니다.
 3. Deploy를 누릅니다.
 
 ### 속도: 서버 위치

@@ -68,7 +68,7 @@ export async function POST(request: Request) {
       const charged = charge.left;
       usageLeft = charged;
       try {
-        const coaching = await coachAttempt(sentence.en, said, diff);
+        const coaching = await coachAttempt(sentence.en, said, diff, userId);
         const allowed = new Set(diff.replacements.map(pairKey));
         const acceptable = new Set(
           coaching.acceptable.map((r) => pairKey({ said: r.said.toLowerCase(), model: r.model.toLowerCase() })).filter((k) => allowed.has(k)),

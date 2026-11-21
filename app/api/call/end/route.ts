@@ -95,7 +95,7 @@ export async function POST(request: Request) {
 
   let report;
   try {
-    report = await lessonReport({ level: lesson.level, topicTitle: lesson.topicTitle, plan: lesson.plan, history: lesson.history });
+    report = await lessonReport({ userId, level: lesson.level, topicTitle: lesson.topicTitle, plan: lesson.plan, history: lesson.history });
   } catch (e) {
     console.error("report failed", e);
     const { status, message } = describeClaudeError(e);

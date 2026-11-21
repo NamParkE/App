@@ -4,6 +4,7 @@ import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import type { Level } from "./types";
 import type { DiffResult } from "./diff";
+import { logAiCall } from "./aiLog";
 
 export const MODEL = process.env.CLAUDE_MODEL?.trim() || "claude-haiku-5-5";
 
@@ -102,6 +103,7 @@ export type GeneratedSentence = z.infer<typeof SentenceSet>["sentences"][number]
 export async function generateSentences(
   topic: { title_en: string; question_en: string },
   level: Level,
+  userId: string,
 ): Promise<GeneratedSentence[]> {
   const { count, guide } = LEVEL_GUIDE[level];
   const response = await client().beta.messages.parse({
@@ -123,6 +125,7 @@ export async function generateSentences(
       },
     ],
   });
+  logAiCall({ userId, kind: "answer" }, response.model, response.usage);
   if (response.stop_reason === "refusal") throw new ClaudeRefusalError("refusal");
   const parsed = response.parsed_output;
   if (!parsed || parsed.sentences.length === 0) throw new Error("empty_output");
@@ -145,6 +148,7 @@ export async function coachAttempt(
   modelSentence: string,
   said: string,
   diff: DiffResult,
+  userId: string,
 ): Promise<Coaching> {
   const response = await client().beta.messages.parse({
     model: MODEL,
@@ -168,6 +172,7 @@ export async function coachAttempt(
       },
     ],
   });
+  logAiCall({ userId, kind: "coach" }, response.model, response.usage);
   if (response.stop_reason === "refusal") throw new ClaudeRefusalError("refusal");
   const parsed = response.parsed_output;
   if (!parsed) throw new Error("empty_output");

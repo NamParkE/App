@@ -1,18 +1,23 @@
 import Link from "next/link";
 import BottomNav from "@/components/BottomNav";
 import SoundSettings from "@/components/SoundSettings";
-import { ChevronIcon } from "@/components/Icons";
+import { ChartIcon, ChevronIcon } from "@/components/Icons";
+import { isOperator, rate, type Overview } from "@/lib/admin";
 import { checkProfile, fetchProfile, requireUser, usageToday } from "@/lib/data";
+import { formatKrw, toKrw } from "@/lib/pricing";
 import { LEVELS } from "@/lib/types";
 
 export default async function MePage() {
   const { supabase, userId, email } = await requireUser();
-  const [rawProfile, { data: family }, { data: members }, used] = await Promise.all([
+  const [rawProfile, { data: family }, { data: members }, used, operator] = await Promise.all([
     fetchProfile(supabase, userId),
     supabase.from("families").select("name, invite_code, owner_id").maybeSingle(),
     supabase.from("profiles").select("id, display_name, level").order("created_at"),
     usageToday(supabase, userId),
+    isOperator(supabase),
   ]);
+  // 운영자에게만: 운영자 메뉴 카드에 이번 달 비용과 한도를 다 쓴 사람 수를 미리 보여 준다
+  const overview = operator ? ((await supabase.rpc("admin_overview")).data as Overview | null) : null;
   const profile = checkProfile(rawProfile);
   const levelTitle = LEVELS.find((l) => l.id === profile.level)?.title;
 
@@ -39,6 +44,23 @@ export default async function MePage() {
           <span className="muted" style={{ fontSize: 13 }}>바꾸기</span>
           <ChevronIcon />
         </Link>
+
+        {operator && (
+          <Link href="/admin" className="adm-entry">
+            <span className="ic">
+              <ChartIcon color="#fff" />
+            </span>
+            <span style={{ display: "flex", flexDirection: "column", gap: 2, flexGrow: 1 }}>
+              <span style={{ fontSize: 15, fontWeight: 700 }}>운영자 메뉴</span>
+              <span style={{ fontSize: 12 }}>
+                {overview
+                  ? `이번 달 AI ${formatKrw(toKrw(overview.month_cost_usd, rate()))} · 오늘 한도 다 씀 ${overview.maxed.length}명`
+                  : "AI 비용 · 사용 현황 · 한도 바꾸기"}
+              </span>
+            </span>
+            <ChevronIcon size={18} color="currentColor" />
+          </Link>
+        )}
 
         <section className="card">
           <div className="label">오늘 사용량</div>

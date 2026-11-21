@@ -27,7 +27,7 @@ export async function POST(request: Request) {
 
   const lastTutor = [...lesson.history].reverse().find((m) => m.role === "tutor")?.text ?? lesson.plan.opening;
   try {
-    const answer = await sosAnswer({ level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle, said: parsed.data.said });
+    const answer = await sosAnswer({ userId, level: lesson.level, lastTutorLine: lastTutor, topicTitle: lesson.topicTitle, said: parsed.data.said });
     after(async () => {
       await saveOrLog(`sos count (lesson ${lesson.id})`, () =>
         admin.from("lessons").update({ sos: lesson.sos + 1, last_active_at: new Date().toISOString() }).eq("id", lesson.id).eq("user_id", userId),

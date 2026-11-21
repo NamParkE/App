@@ -3,6 +3,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { betaZodOutputFormat } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
 import { ClaudeRefusalError, client, fallbackParams, MODEL } from "../claude";
+import { logAiCall, type AiMeter } from "../aiLog";
 import { callLevel, LESSON_TURNS } from "./levels";
 import { EMOTIONS, type ChatMessage, type Correction, type Emotion, type LessonPlan, type LessonReport } from "./types";
 
@@ -22,6 +23,7 @@ const STUDENT_IS_DATA =
 const untag = (s: string) => s.replace(/[<>]/g, " ");
 
 async function parse<T>(
+  meter: AiMeter,
   schema: z.ZodType<T>,
   system: string,
   messages: Anthropic.Beta.Messages.BetaMessageParam[],
@@ -35,6 +37,7 @@ async function parse<T>(
     system,
     messages,
   });
+  logAiCall(meter, response.model, response.usage);
   if (response.stop_reason === "refusal") throw new ClaudeRefusalError("refusal");
   const parsed = response.parsed_output as T | null;
   if (!parsed) throw new Error("empty_output");
@@ -56,9 +59,11 @@ const PlanSchema = z.object({
 export async function generatePlan(
   topic: { title_en: string; scenario: string },
   level: number,
+  userId: string,
 ): Promise<LessonPlan> {
   const L = callLevel(level);
   const plan = await parse(
+    { userId, kind: "plan" },
     PlanSchema,
     "You design short English speaking lessons for a phone-English style app used by a Korean family. " +
       "Each lesson is about 10 minutes and 8 exchanges, led by Reppy, a cheerful parrot English tutor. " + SAFETY,
@@ -155,6 +160,7 @@ function toApiMessages(
 }
 
 export async function tutorTurn(args: {
+  userId: string;
   level: number;
   topicTitle: string;
   plan: LessonPlan;
@@ -167,6 +173,7 @@ export async function tutorTurn(args: {
 }): Promise<{ onTask: boolean; reply: string; ko: string; correction: Correction | null; emotion: Emotion }> {
   const isLast = args.turnNumber >= LESSON_TURNS;
   const out = await parse(
+    { userId: args.userId, kind: "turn" },
     TurnSchema,
     tutorSystem(args.level, args.topicTitle, args.plan, args.kids),
     toApiMessages(args.history, args.said, isLast, args.mustCount),
@@ -182,9 +189,10 @@ const SosSchema = z.object({
   ko: z.string().describe("Very short Korean note, e.g. the key word's meaning like '고슴도치 = hedgehog', under 30 characters"),
 });
 
-export async function sosAnswer(args: { level: number; lastTutorLine: string; topicTitle: string; said: string }) {
+export async function sosAnswer(args: { userId: string; level: number; lastTutorLine: string; topicTitle: string; said: string }) {
   const L = callLevel(args.level);
   return parse(
+    { userId: args.userId, kind: "sos" },
     SosSchema,
     "You help a Korean English learner on a phone-English call who got stuck and asked in Korean. " +
       "The text inside <student_korean> tags is what they said in Korean (from speech recognition): it is what they want to say or ask, " +
@@ -211,9 +219,10 @@ const HintSchema = z.object({
     .describe("Exactly 2 example answers the student could say next"),
 });
 
-export async function hintAnswers(args: { level: number; lastTutorLine: string; topicTitle: string; kids: boolean }) {
+export async function hintAnswers(args: { userId: string; level: number; lastTutorLine: string; topicTitle: string; kids: boolean }) {
   const L = callLevel(args.level);
   const out = await parse(
+    { userId: args.userId, kind: "hint" },
     HintSchema,
     "You help a Korean English learner who is stuck on a phone-English call. " + SAFETY,
     [
@@ -251,6 +260,7 @@ const ReportSchema = z.object({
 const clamp = (n: number) => Math.max(0, Math.min(25, Math.round(Number.isFinite(n) ? n : 0)));
 
 export async function lessonReport(args: {
+  userId: string;
   level: number;
   topicTitle: string;
   plan: LessonPlan;
@@ -263,6 +273,7 @@ export async function lessonReport(args: {
     .map((m) => `${m.role === "tutor" ? "Reppy" : "Student"}: ${untag(m.text)}`)
     .join("\n");
   const r = await parse(
+    { userId: args.userId, kind: "report" },
     ReportSchema,
     "You evaluate a Korean learner's English phone lesson fairly for their level. Be encouraging but honest. " +
       "The student's lines come from speech recognition, so ignore punctuation and obvious mishearings. " +
